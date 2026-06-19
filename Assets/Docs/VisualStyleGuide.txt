@@ -1,0 +1,127 @@
+Calico Combat League - Visual Style Guide
+==========================================
+Single source of truth for values: Assets/Scripts/Core/VisualTheme.cs
+UI construction helpers that consume it: Assets/Scripts/UI/UIFactory.cs
+
+This document describes the CURRENT theme. To change the game's look,
+edit VisualTheme.cs - every screen pulls from it, so nothing else needs
+to change.
+
+--------------------------------------------------
+COLOR PALETTE
+--------------------------------------------------
+
+Primary (brand surfaces)
+  BackgroundColor   #121010   near-black, the canvas/screen backdrop
+  PanelColor        #121010   same as background; full-screen panels
+  CardColor         #241E1C   sub-panel / list-row background
+
+Secondary (text + neutral chrome)
+  CreamColor        #F5EDD9   primary readable text on dark surfaces
+  SecondaryColor    #423A33   neutral/back buttons
+  MutedTextColor    #C7BDAE   captions, secondary/quiet text
+  LockedColor       #2B2826   disabled/locked state fill
+
+Accent (calls to action / status)
+  AccentOrange      #EE7517   primary buttons, "available" status
+  GoldColor         #DCAF33   headings, championship/gold moments
+  DangerColor       #942826   destructive actions (e.g. "NEW GAME")
+  PositiveColor      #337339  confirmations, purchases, "cleared" status
+
+Usage rule: status communicates through COLOR first, not just label text -
+green/Positive = cleared or affordable, orange/Accent = available/primary
+action, gold = champion-tier, grey/Locked = unavailable, red/Danger =
+destructive or "you lost."
+
+--------------------------------------------------
+TYPOGRAPHY
+--------------------------------------------------
+
+One font throughout: Unity's built-in LegacyRuntime.ttf (no font import
+required). Five fixed sizes, all defined in VisualTheme.cs:
+
+  Heading      42pt   Bold    Gold     Screen titles ("VICTORY!", "GYM MAP")
+  Subheading   26pt   Bold    Cream    Section headers, fighter names
+  Body         22pt   Normal  Cream    Primary readable content
+  Caption      18pt   Normal  Muted    Secondary detail, descriptions
+  ButtonText   28pt   Bold    Cream    Auto-shrinks (Best Fit) to fit the button
+
+Sizes are tuned against the 1080x1920 reference canvas (CanvasScaler,
+MatchWidthOrHeight 0.5) - they scale proportionally on other resolutions.
+
+--------------------------------------------------
+UI HIERARCHY
+--------------------------------------------------
+
+Every screen follows the same skeleton:
+  1. Heading (top) - what screen is this
+  2. Optional brand header or banner (identity/context)
+  3. Primary content area - cards/rows/text, scroll-free (fixed layout,
+     row height = 1 / itemCount of the container)
+  4. Primary action button(s)
+  5. BACK / secondary navigation (bottom)
+
+--------------------------------------------------
+PANEL RULES
+--------------------------------------------------
+
+- All panels are built via UIFactory.CreatePanel (full-screen, flat color)
+  or UIFactory.CreateCard (rounded-rectangle sub-panel, 18px corner radius
+  at the 64px sprite resolution UIFactory generates at - see
+  VisualTheme.StandardCornerRadius).
+- Cards group related content (a stat row, a roster entry, a summary box).
+  Never place raw text directly on the screen background if it's part of
+  a logical group - wrap it in a card.
+- Lists of N items split their container into N even rows with ~12-15%
+  padding between rows (see any *Screen.cs BuildRow method for the pattern).
+
+--------------------------------------------------
+BUTTON RULES
+--------------------------------------------------
+
+- Built via UIFactory.CreateButton - rounded sprite, Best Fit label text,
+  a press-down scale (ButtonPunch) and a click sound, automatically.
+- Color conveys intent (see palette usage rule above). Default with no
+  color argument is AccentOrange (primary action).
+- Disabled buttons fade toward 45% grey automatically (Button.colors).
+- Minimum tap target: rows are sized to at least ~10% of screen height
+  on the 1920px-tall reference canvas (~190px) - comfortably above the
+  ~88px Apple/Android minimum touch target at any common device DPI.
+
+--------------------------------------------------
+PORTRAIT DIMENSIONS
+--------------------------------------------------
+
+Fighter portraits render inside a portrait frame that is roughly SQUARE
+(slightly taller than wide - the frame in UIFactory.CreateFighterCard is
+~0.76 width : 0.88 height of its card slot). Recommended source art:
+  768x768 px, square, transparent or solid background, PNG.
+Portraits use Image.preserveAspect = true, so non-square art will be
+letterboxed rather than distorted - square is still strongly recommended.
+
+--------------------------------------------------
+BANNER DIMENSIONS
+--------------------------------------------------
+
+Gym banners (Gym Screen header) render in a wide card, roughly 4.2:1
+(width:height). Recommended source art:
+  1600x380 px, PNG or JPG.
+
+--------------------------------------------------
+ICON DIMENSIONS
+--------------------------------------------------
+
+All icons (gym, move, item, achievement) are generated at 96x96 px when
+placeholders, and displayed at small square sizes (roughly 10-18% of their
+row's height). Recommended source art for real icons:
+  128x128 px, square, transparent background, PNG.
+
+--------------------------------------------------
+LOGOS / BRANDING
+--------------------------------------------------
+
+League logo: roughly 1:1 to 2:1 (width:height), recommended 1024x768 PNG
+  with transparent background, used via UIFactory.CreateBrandHeader.
+Champion belt artwork: wide format, recommended 1600x900 PNG, used via
+  UIFactory.CreateChampionBadge (only shown if Art/Logos/champion_belt
+  exists; otherwise the generated medal renders instead).

@@ -1,0 +1,127 @@
+Calico Combat League - AI Art Readiness
+=========================================
+Goal: future artwork (hand-drawn or AI-generated) can be dropped into
+Assets/Resources/Art/... and Assets/Resources/Audio/... with ZERO code
+changes. Every lookup goes through Core/ArtRegistry.cs, which always
+falls back to a generated placeholder if a file is missing - the game
+never breaks because art is absent.
+
+How to add an asset:
+  1. Generate or create the image at the size/aspect ratio listed below.
+  2. Import it into Unity as a Sprite (Texture Type: Sprite (2D and UI)).
+  3. Place it at the exact path/filename listed below.
+  4. Run the game - the next time that screen refreshes, the real art
+     is used automatically. No script needs to change.
+
+--------------------------------------------------
+FIGHTER PORTRAITS
+--------------------------------------------------
+Path:        Assets/Resources/Art/Fighters/{id}.png
+Size:        768x768 px (square)
+Aspect:      1:1
+Import:      Sprite (2D and UI), no Mip Maps, no compression artifacts
+             needed at small UI sizes - "Truecolor" or default is fine.
+
+Two kinds of id:
+  Per-fighter:  exact OpponentId from Data/GymDatabase.cs, e.g.
+                "boxing_leader.png", "wrestling_trainer_2.png"
+  Per-archetype (shared fallback): "archetype_Boxer.png",
+                "archetype_Wrestler.png", "archetype_BjjSpecialist.png",
+                "archetype_MuayThaiFighter.png"
+  Player:       "player.png"
+
+Priority when rendering a fighter's portrait (Part 4 of Milestone 13):
+  1. Exact per-fighter art (if it exists)
+  2. Shared archetype art (if the per-fighter art doesn't exist)
+  3. Generated silhouette, tinted by discipline color (always works)
+
+Example AI prompt:
+  "Stylized cartoon MMA fighter portrait, calico-cat-themed combat league,
+   bold flat colors, [boxer / wrestler / muay thai fighter / bjj
+   specialist] stance, square framing, transparent background, mobile
+   game UI art style."
+
+--------------------------------------------------
+GYM BANNERS
+--------------------------------------------------
+Path:   Assets/Resources/Art/Gyms/{gymId}_banner.png
+Size:   1600x380 px
+Aspect: ~4.2:1 (wide letterbox)
+GymIds: boxing_gym, muaythai_gym, wrestling_gym, bjj_gym, championship_gym
+
+Example AI prompt:
+  "Wide banner illustration of a [boxing / muay thai / wrestling / BJJ]
+   gym interior, cartoon MMA league style, warm dramatic lighting,
+   16:4 aspect ratio, no text."
+
+--------------------------------------------------
+GYM / SCREEN BACKGROUNDS
+--------------------------------------------------
+Path:   Assets/Resources/Art/Backgrounds/{key}.png
+Size:   1080x1920 px (matches the portrait reference canvas exactly)
+Aspect: 9:16 (full-screen portrait)
+
+Known keys already wired into screens:
+  main_menu                          - Main Menu screen
+  gym_map                            - Gym Map screen
+  battle                             - Battle screen
+  championship                       - Championship screen
+  {gymId}_background (e.g.
+    boxing_gym_background)           - that gym's roster screen
+
+Example AI prompt:
+  "Full-screen portrait background, blurred MMA gym interior, cartoon
+   league art style, dark vignette edges so foreground UI text stays
+   readable, 9:16 aspect ratio, no characters, no text."
+
+--------------------------------------------------
+LOGOS / BRANDING
+--------------------------------------------------
+Path:   Assets/Resources/Art/Logos/league_logo.png
+Size:   1024x768 px, transparent background
+Aspect: ~4:3
+
+Path:   Assets/Resources/Art/Logos/champion_belt.png
+Size:   1600x900 px, transparent background
+Aspect: ~16:9
+
+Example AI prompts:
+  Logo: "Championship league logo, calico cat mascot wearing MMA gloves,
+         gold and orange color scheme, bold flat icon style, transparent
+         background, no text."
+  Belt: "Championship MMA belt artwork, gold plate, calico cat emblem at
+         center, transparent background, wide format."
+
+--------------------------------------------------
+ICONS (achievements, items, moves, gyms)
+--------------------------------------------------
+Path:   Assets/Resources/Art/Icons/{gymId}_icon.png
+Path:   Assets/Resources/Art/Icons/achievement_{achievementId}.png
+Path:   Assets/Resources/Art/Icons/item_{itemId}.png
+Path:   Assets/Resources/Art/Icons/move_{moveId}.png
+Size:   128x128 px, square, transparent background
+Aspect: 1:1
+
+IDs are the exact Id/GymId fields from Data/GymDatabase.cs,
+Data/AchievementDatabase.cs, Data/ItemDatabase.cs, Data/MoveDatabase.cs.
+
+Example AI prompt:
+  "Small flat icon, [boxing glove / wrestling rings / submission lock /
+   trophy], single bold color on transparent background, simple mobile
+   game UI icon style, square."
+
+--------------------------------------------------
+AUDIO (reference - see Assets/Resources/Audio/README.txt)
+--------------------------------------------------
+Path:   Assets/Resources/Audio/{name}.wav (or .mp3/.ogg)
+Names:  music, click, hit, critical_hit, victory, defeat, gym_cleared,
+        champion_victory
+
+--------------------------------------------------
+WHY THIS WORKS WITHOUT CODE CHANGES
+--------------------------------------------------
+Every one of the paths above is built from data already in the project
+(an Id, a GymId, an ArchetypeType, or a fixed screen key) inside
+Core/ArtRegistry.cs. Adding a new gym, item, move, or achievement later
+automatically gets its own art slot for free - no new lookup method is
+needed unless an entirely new CATEGORY of asset is introduced.
