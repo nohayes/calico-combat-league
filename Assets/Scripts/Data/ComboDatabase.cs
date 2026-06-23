@@ -1,36 +1,47 @@
 using System.Collections.Generic;
 
-// Milestone 30, Part 6: hidden combos. Throwing the right move sequence turns
-// the final move into a named "finish" with a damage bonus. Kept hidden from
-// any UI - discovery happens only through the battle log, the same way a
-// player would stumble onto a real combo by feel.
+// Milestone 31: starter combo set. Throwing the right move sequence turns the
+// final move into a named "finish" with a damage bonus and a small stamina
+// refund. Kept hidden from any UI - discovery happens only through the
+// battle log and the small "current chain" readout, the same way a player
+// would stumble onto a real combo by feel.
+//
+// Note: the brief's Muay Thai combo called for "Body Kick" and "Head Kick",
+// which don't exist as moves in MoveDatabase. To avoid adding new moves (and
+// the gym/progression unlock questions that would raise), Thai Barrage is
+// built from existing Muay Thai strikes instead, ending in the gym's actual
+// signature finisher - same escalating-kicks feel, zero new move data.
 public static class ComboDatabase
 {
-    public static readonly ComboData BoxingCombo = new ComboData(
-        "boxing_combo", "Boxing Combo Finish", "Jab -> Cross -> Hook",
-        new[] { "jab", "cross", "hook" }, 1.5f);
+    public static readonly ComboData OneTwoFinish = new ComboData(
+        "one_two_finish", "One-Two Finish", "Jab -> Jab -> Cross",
+        new[] { "jab", "jab", "cross" },
+        "Set up the cross with a pair of jabs and it lands harder than it has any right to.",
+        1.5f);
 
-    public static readonly ComboData MuayThaiCombo = new ComboData(
-        "muaythai_combo", "Muay Thai Combo Finish", "Leg Kick -> Push Kick -> Knee Strike",
-        new[] { "leg_kick", "push_kick", "knee_strike" }, 1.5f);
+    public static readonly ComboData ThaiBarrage = new ComboData(
+        "thai_barrage", "Thai Barrage", "Leg Kick -> Knee Strike -> Spinning Back Kick",
+        new[] { "leg_kick", "knee_strike", "spinning_back_kick" },
+        "Chop the legs, drive the knee, then spin through for the finish.",
+        1.5f);
 
-    public static readonly ComboData WrestlingCombo = new ComboData(
-        "wrestling_combo", "Wrestling Combo Finish", "Double Leg -> Body Lock -> Suplex",
-        new[] { "double_leg_takedown", "body_lock", "suplex" }, 1.5f);
+    public static readonly ComboData GroundControl = new ComboData(
+        "ground_control", "Ground Control", "Double Leg -> Body Lock -> Ground Smash",
+        new[] { "double_leg_takedown", "body_lock", "ground_smash" },
+        "Take it down, lock it up, end it from the top.",
+        1.5f);
 
-    public static readonly ComboData BjjCombo = new ComboData(
-        "bjj_combo", "BJJ Combo Finish", "Double Leg -> Kimura -> Armbar",
-        new[] { "double_leg_takedown", "kimura", "armbar" }, 1.5f);
+    public static readonly ComboData SubmissionChain = new ComboData(
+        "submission_chain", "Submission Chain", "Body Lock -> Armbar -> Ground Smash",
+        new[] { "body_lock", "armbar", "ground_smash" },
+        "The armbar attempt doesn't have to finish the fight when the follow-up does.",
+        1.5f);
 
-    public static readonly ComboData GroundAndPoundCombo = new ComboData(
-        "gnp_combo", "Ground and Pound Combo Finish", "Double Leg -> Ground Smash",
-        new[] { "double_leg_takedown", "ground_smash" }, 1.4f);
-
-    // Longest sequences first: if a 3-move combo and a shorter one could both
-    // match the same trailing moves, the more specific one should win.
+    // Future expansion point (Part 9): champion/secret/archetype-exclusive/
+    // legendary combos just get added here - TryMatch needs no changes.
     public static readonly List<ComboData> All = new List<ComboData>
     {
-        BoxingCombo, MuayThaiCombo, WrestlingCombo, BjjCombo, GroundAndPoundCombo
+        OneTwoFinish, ThaiBarrage, GroundControl, SubmissionChain
     };
 
     public static ComboData TryMatch(List<string> recentMoveIds)

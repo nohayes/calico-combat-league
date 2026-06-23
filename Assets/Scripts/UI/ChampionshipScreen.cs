@@ -64,7 +64,7 @@ public class ChampionshipScreen : UIScreen
         Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
         championVisual.Initialize(championPortrait, "player", GM.Player.Archetype, theme, faceRight: true);
         championVisual.PlayVictoryPose(champion: true, leader: false);
-        UIFactory.AddDisciplineBadge(championPortraitFrame, IconFactory.GetArchetypeIconShape(GM.Player.Archetype), theme);
+        UIFactory.AddDisciplineBadge(championPortraitFrame, GM.Player.Archetype, theme);
 
         infoText.text =
             $"{GM.Player.Name}\n{archetypeName}\n" +

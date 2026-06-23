@@ -72,7 +72,7 @@ public class ProfileScreen : UIScreen
 
         Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
         UIFactory.SetFighterPortrait(portraitImage, "player", GM.Player.Archetype, theme);
-        UIFactory.AddDisciplineBadge(portraitFrame, IconFactory.GetArchetypeIconShape(GM.Player.Archetype), theme);
+        UIFactory.AddDisciplineBadge(portraitFrame, GM.Player.Archetype, theme);
 
         bool isChampion = GM.HasBecomeChampion();
         SetChampionBadge(isChampion);

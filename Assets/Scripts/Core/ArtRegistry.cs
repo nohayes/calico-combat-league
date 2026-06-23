@@ -62,6 +62,21 @@ public static class ArtRegistry
     public static Sprite GetGymIcon(string gymId) =>
         Load(string.IsNullOrEmpty(gymId) ? null : $"Art/Icons/{gymId}_icon");
 
+    // Milestone 30 (icon integration): official archetype icons supplied as
+    // fixed filenames (not the {id}_icon convention GetGymIcon uses, since
+    // these aren't keyed off a database id list).
+    public static Sprite GetArchetypeIcon(ArchetypeType archetype)
+    {
+        switch (archetype)
+        {
+            case ArchetypeType.Boxer: return Load("Art/Icons/boxer_icon");
+            case ArchetypeType.Wrestler: return Load("Art/Icons/wrestler_icon");
+            case ArchetypeType.MuayThaiFighter: return Load("Art/Icons/muay_thai_icon");
+            case ArchetypeType.BjjSpecialist: return Load("Art/Icons/bjj_icon");
+            default: return null;
+        }
+    }
+
     public static Sprite GetLogo() => Load("Art/Logos/league_logo");
 
     // Single-image replacement for the generated badge+title+subtitle header

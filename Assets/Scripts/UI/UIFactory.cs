@@ -685,6 +685,25 @@ public static class UIFactory
     // rather than stacking duplicates, since the opponent's discipline can change.
     public static void AddDisciplineBadge(Transform portraitFrame, IconShape shape, Color color)
     {
+        AddDisciplineBadgeSprite(portraitFrame, IconFactory.GetShapeSprite(shape), color);
+    }
+
+    // Milestone 30 (icon integration): archetype-specific overload that prefers
+    // the official archetype icon art (boxer_icon, wrestler_icon, muay_thai_icon,
+    // bjj_icon) when present, falling back to the generated shape badge otherwise -
+    // same badge frame/positioning either way, so every existing call site that
+    // only had a generated shape keeps working unchanged.
+    public static void AddDisciplineBadge(Transform portraitFrame, ArchetypeType archetype, Color color)
+    {
+        var realIcon = ArtRegistry.GetArchetypeIcon(archetype);
+        if (realIcon != null)
+            AddDisciplineBadgeSprite(portraitFrame, realIcon, Color.white);
+        else
+            AddDisciplineBadgeSprite(portraitFrame, IconFactory.GetShapeSprite(IconFactory.GetArchetypeIconShape(archetype)), color);
+    }
+
+    static void AddDisciplineBadgeSprite(Transform portraitFrame, Sprite sprite, Color color)
+    {
         var existing = portraitFrame.Find("DisciplineBadge");
         if (existing != null) Object.Destroy(existing.gameObject);
 
@@ -708,8 +727,9 @@ public static class UIFactory
         iconRt.offsetMin = Vector2.zero;
         iconRt.offsetMax = Vector2.zero;
         var iconImage = iconGo.GetComponent<Image>();
-        iconImage.sprite = IconFactory.GetShapeSprite(shape);
+        iconImage.sprite = sprite;
         iconImage.color = color;
+        iconImage.preserveAspect = true;
     }
 
     // A more ornate medal for championship-tier moments (Championship screen, Hall

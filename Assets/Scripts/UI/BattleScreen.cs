@@ -19,6 +19,7 @@ public class BattleScreen : UIScreen
     readonly Text playerEffectsText;
     readonly Text opponentEffectsText;
     readonly Text logText;
+    readonly Text chainText;
     readonly RectTransform stageCard;
     readonly CanvasGroup stageGroup;
     readonly RectTransform playerCombatantRoot;
@@ -128,14 +129,23 @@ public class BattleScreen : UIScreen
             new Vector2(0.45f, 0.5f), new Vector2(0.55f, 0.72f), FontStyle.Bold);
 
         // Battle log now lives in the center column, at the same height band as
-        // each fighter's name/bars on either side of it.
-        UIFactory.CreateCard(Root.transform, "LogBackdrop", new Vector2(0.36f, 0.155f), new Vector2(0.64f, 0.295f),
+        // each fighter's name/bars on either side of it. Milestone 31, Part 5:
+        // shrunk slightly from the top to make room for the small "current
+        // chain" readout just above it, without touching anything else's layout.
+        UIFactory.CreateCard(Root.transform, "LogBackdrop", new Vector2(0.36f, 0.155f), new Vector2(0.64f, 0.275f),
             new Color(0.06f, 0.05f, 0.05f, 0.88f));
         // Milestone 28: bumped from CaptionSize - on a typical 16:9 laptop display
         // the canvas scale factor lands well under 1.0, so the log was reading
         // smaller than intended for the most important screen in the game.
         logText = UIFactory.CreateText(Root.transform, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
-            new Vector2(0.37f, 0.16f), new Vector2(0.63f, 0.285f));
+            new Vector2(0.37f, 0.16f), new Vector2(0.63f, 0.265f));
+
+        // Milestone 31, Part 5: a small, unobtrusive readout of the player's
+        // in-progress move chain (e.g. "Jab -> Jab"), so combos can be found
+        // by noticing the pattern rather than only by reading a wiki.
+        chainText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.36f, 0.277f), new Vector2(0.64f, 0.295f), TextAnchor.MiddleCenter);
+        chainText.color = UIFactory.MutedTextColor;
+        chainText.fontStyle = FontStyle.Italic;
 
         itemButton = UIFactory.CreateButton(Root.transform, "ITEMS", new Vector2(0.30f, 0.115f), new Vector2(0.46f, 0.148f),
             () => ToggleItemPanel(), UIFactory.SecondaryColor);
@@ -302,6 +312,7 @@ public class BattleScreen : UIScreen
 
         log.Clear();
         logText.text = "";
+        chainText.text = "";
         showingItems = false;
         animatingTurn = true;
         itemContainer.gameObject.SetActive(false);
@@ -326,7 +337,7 @@ public class BattleScreen : UIScreen
         UIFactory.SetPlayerAvatar(playerPortrait, GM.Player.Archetype, playerTheme);
         UIFactory.SetFighterPortrait(opponentPortrait, GM.CurrentOpponentInfo?.OpponentId, opponentArchetype, opponentTheme);
 
-        UIFactory.AddDisciplineBadge(playerPortrait.transform.parent, IconFactory.GetArchetypeIconShape(GM.Player.Archetype), playerTheme);
+        UIFactory.AddDisciplineBadge(playerPortrait.transform.parent, GM.Player.Archetype, playerTheme);
         if (GM.CurrentGym != null)
             UIFactory.AddDisciplineBadge(opponentPortrait.transform.parent, IconFactory.GetGymIconShape(GM.CurrentGym.GymType), opponentTheme);
 
@@ -595,6 +606,27 @@ public class BattleScreen : UIScreen
         opponentEffectsText.text = FormatEffects(GM.CurrentOpponent);
     }
 
+    // Milestone 31, Part 5: reads BattleSystem's own tracker rather than
+    // duplicating it - empties itself naturally once a combo fires (the
+    // tracker clears) or the player breaks the chain with Recover.
+    void UpdateComboChainDisplay()
+    {
+        var ids = GM.CurrentBattle?.RecentPlayerMoveIds;
+        if (ids == null || ids.Count == 0)
+        {
+            chainText.text = "";
+            return;
+        }
+
+        var names = new List<string>(ids.Count);
+        foreach (var id in ids)
+        {
+            var move = MoveDatabase.GetById(id);
+            names.Add(move != null ? move.Name : id);
+        }
+        chainText.text = "Chain: " + string.Join(" -> ", names);
+    }
+
     string FormatEffects(FighterData fighter)
     {
         var effects = GM.CurrentBattle.GetEffects(fighter);
@@ -663,6 +695,7 @@ public class BattleScreen : UIScreen
 
         AppendLog(turnLog);
         UpdateBars();
+        UpdateComboChainDisplay();
         RunAnimation(PlayTurnFeedback(turnLog, result, move));
     }
 
@@ -689,6 +722,7 @@ public class BattleScreen : UIScreen
 
         AppendLog(turnLog);
         UpdateBars();
+        UpdateComboChainDisplay();
         RunAnimation(PlayTurnFeedback(turnLog, result, null));
     }
 
@@ -843,26 +877,25 @@ public class BattleScreen : UIScreen
     {
         return line.Contains("is bleeding!") || line.Contains("is stunned!") ||
             line.Contains("defense drops!") || line.Contains("speed drops!") ||
-            line.Contains("COMBO DISCOVERED") || line.Contains("catches their breath");
+            line.Contains("lands a COMBO!") || line.Contains("catches their breath");
     }
 
     void ProcessSingleLine(string line)
     {
-        // Milestone 30, Part 7: the combo announcement doesn't start with a
-        // fighter's name, so it's handled before the name-prefix gate below.
-        // Reuses the existing crit popup/sound - no new FX system.
-        if (line.StartsWith("COMBO DISCOVERED!"))
-        {
-            AudioManager.Instance?.PlayCriticalHit();
-            playerFx.SpawnPopup("COMBO!", CritColor, true);
-            return;
-        }
-
         bool namedIsPlayer = line.StartsWith(GM.Player.Name);
         bool namedIsOpponent = !namedIsPlayer && GM.CurrentOpponent != null && line.StartsWith(GM.CurrentOpponent.Name);
         if (!namedIsPlayer && !namedIsOpponent) return;
 
-        if (line.Contains("CRITICAL") && line.Contains("damage!"))
+        // Milestone 31, Part 4/8: routed by the same name-prefix check as every
+        // other line, so the "COMBO!" popup lands on whichever side actually
+        // triggered it - the player, or (per Part 8) the AI landing one by chance.
+        if (line.Contains("lands a COMBO!"))
+        {
+            AudioManager.Instance?.PlayCriticalHit();
+            var fx = namedIsPlayer ? playerFx : opponentFx;
+            fx.SpawnPopup("COMBO!", CritColor, true);
+        }
+        else if (line.Contains("CRITICAL") && line.Contains("damage!"))
         {
             AudioManager.Instance?.PlayCriticalHit();
             ShowHitFeedback(onOpponentSide: namedIsPlayer, ExtractNumber(line), crit: true);
@@ -982,7 +1015,7 @@ public class BattleScreen : UIScreen
     // Colors key moments (crit, miss, exhausted, status, regen) so the log reads at a glance.
     static string FormatLogLine(string line)
     {
-        if (line.Contains("COMBO DISCOVERED")) return $"<b><color=#FFD24D>{line}</color></b>";
+        if (line.Contains("COMBO ACTIVATED") || line.Contains("lands a COMBO!")) return $"<b><color=#FFD24D>{line}</color></b>";
         if (line.Contains("CRITICAL")) return $"<b><color=#FFD24D>{line}</color></b>";
         if (line.Contains("misses")) return $"<i><color=#9A9A9A>{line}</color></i>";
         if (line.Contains("too exhausted")) return $"<color=#E06A60>{line}</color>";

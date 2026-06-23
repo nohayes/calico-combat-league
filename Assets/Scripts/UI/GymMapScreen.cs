@@ -35,21 +35,18 @@ public class GymMapScreen : UIScreen
         var marker = UIFactory.CreateAvatarMarker(avatarFrame, "Player", AvatarRestMin, AvatarRestMax, out avatarImage);
         avatarVisual = marker.gameObject.AddComponent<PlayerAvatarVisual>();
 
-        // Layout: FIGHT stays largest/primary up top. Milestone 30 adds STREET
-        // FIGHT just beneath it as a clearly secondary-but-prominent option (the
-        // grinding path, not the main one), with PROFILE / SHOP / STATS as one
-        // uniform row beneath both, the whole group centered in the right column.
-        fightButton = UIFactory.CreateButton(Root.transform, "FIGHT", new Vector2(0.50f, 0.60f), new Vector2(0.96f, 0.74f),
+        // Clean 1+3 layout: FIGHT stays largest/primary up top, with PROFILE /
+        // SHOP / STATS as one uniform row beneath it, the whole group centered
+        // a little lower in the right column. (Milestone 30: Street Fight moved
+        // to the Gym Selection screen, alongside the gyms it trains you for.)
+        fightButton = UIFactory.CreateButton(Root.transform, "FIGHT", new Vector2(0.50f, 0.56f), new Vector2(0.96f, 0.74f),
             OnFightPressed, UIFactory.DangerColor);
 
-        UIFactory.CreateButton(Root.transform, "STREET FIGHT", new Vector2(0.50f, 0.44f), new Vector2(0.96f, 0.57f),
-            () => GM.ChangeState(GameState.StreetFight), UIFactory.AccentOrange);
-
-        UIFactory.CreateButton(Root.transform, "PROFILE", new Vector2(0.50f, 0.30f), new Vector2(0.64f, 0.41f),
+        UIFactory.CreateButton(Root.transform, "PROFILE", new Vector2(0.50f, 0.36f), new Vector2(0.64f, 0.48f),
             () => GM.ChangeState(GameState.ProfileScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "SHOP", new Vector2(0.66f, 0.30f), new Vector2(0.80f, 0.41f),
+        UIFactory.CreateButton(Root.transform, "SHOP", new Vector2(0.66f, 0.36f), new Vector2(0.80f, 0.48f),
             () => GM.ChangeState(GameState.ShopScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.82f, 0.30f), new Vector2(0.96f, 0.41f),
+        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.82f, 0.36f), new Vector2(0.96f, 0.48f),
             () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
 
         travelCard = UIFactory.CreateCard(Root.transform, "TravelCard", new Vector2(0.25f, 0.35f), new Vector2(0.75f, 0.65f),

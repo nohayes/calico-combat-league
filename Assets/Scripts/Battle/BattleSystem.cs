@@ -37,10 +37,17 @@ public class BattleSystem
     // Reused across AI turns to avoid allocating a fresh list every move choice.
     readonly List<MoveData> affordableMovesBuffer = new List<MoveData>();
 
-    // Milestone 30, Part 6: trailing window of the player's own recent move ids,
-    // used to detect hidden combos. Player-only by design - keeps the AI's
-    // existing move selection completely untouched.
+    // Milestone 31, Part 1: trailing window of each fighter's own recent move
+    // ids, used to detect combos. The AI's move selection (ChooseEnemyMove)
+    // stays completely untouched - it has no idea combos exist - but if it
+    // happens to land on a real sequence by chance, Part 8 says it should
+    // still get the bonus, so both fighters get the same lightweight tracker.
     readonly List<string> recentPlayerMoveIds = new List<string>();
+    readonly List<string> recentOpponentMoveIds = new List<string>();
+
+    // Milestone 31, Part 5: lets BattleScreen show the player's in-progress
+    // chain ("Jab -> Jab") without exposing any other battle internals.
+    public IReadOnlyList<string> RecentPlayerMoveIds => recentPlayerMoveIds;
 
     public BattleSystem(FighterData player, FighterData opponent)
     {
@@ -179,12 +186,22 @@ public class BattleSystem
         var move = wantsToRecover ? null : ChooseEnemyMove(Opponent);
         if (move == null)
         {
+            recentOpponentMoveIds.Clear();
             PerformRecover(Opponent, log);
         }
         else
         {
             Opponent.Stats.CurrentStamina -= move.StaminaCost;
-            ResolveMove(Opponent, Player, move, playerEffects, log);
+
+            // Milestone 31, Part 8: the AI has no idea combos exist - it never
+            // chooses moves to set one up - but if ChooseEnemyMove's ordinary
+            // logic happens to land on a real sequence, it still gets the bonus.
+            recentOpponentMoveIds.Add(move.Id);
+            if (recentOpponentMoveIds.Count > MaxComboTrackLength) recentOpponentMoveIds.RemoveAt(0);
+            var aiCombo = ComboDatabase.TryMatch(recentOpponentMoveIds);
+            if (aiCombo != null) recentOpponentMoveIds.Clear();
+
+            ResolveMove(Opponent, Player, move, playerEffects, log, aiCombo);
             RecoverStamina(Opponent, log);
         }
 
@@ -334,14 +351,19 @@ public class BattleSystem
         bool crit = move.HasEffect(MoveEffect.CriticalHit) && rng.Next(0, 100) < move.EffectChance;
         if (crit) baseDamage *= 1.5f;
 
-        // Milestone 30, Part 6/7: the combo bonus only announces once the move
+        // Milestone 31, Part 6/7: the combo bonus only announces once the move
         // is confirmed to land - the move's own name stays in the hit line
         // below so BattleScreen's existing move-type lookup for hit animations
-        // keeps working unchanged.
+        // keeps working unchanged. The first line starts with the attacker's
+        // name so BattleScreen's existing name-prefix routing puts the "COMBO!"
+        // popup on the right side, whether it's the player or (per Part 8) the
+        // AI landing it by chance.
         if (combo != null)
         {
             baseDamage *= combo.DamageBonusMultiplier;
-            log.Add($"COMBO DISCOVERED! {combo.DisplaySequence} -> {combo.DisplayName}! Damage boosted!");
+            attacker.Stats.CurrentStamina = Mathf.Min(attacker.Stats.MaxStamina, attacker.Stats.CurrentStamina + combo.StaminaRefund);
+            log.Add($"{attacker.Name} lands a COMBO! {combo.DisplayName}!");
+            log.Add($"COMBO ACTIVATED: {combo.DisplayName}\n{move.Name} deals bonus damage. (+{combo.StaminaRefund} stamina)");
         }
 
         int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage));

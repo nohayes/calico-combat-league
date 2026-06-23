@@ -64,13 +64,16 @@ public class GymSelectionScreen : UIScreen
         // Gym is cleared. Folding it into the same row-math as the real gyms
         // (rather than a fixed overlay) means it never overlaps them.
         bool shadowUnlocked = GM.HasBecomeChampion();
-        int totalRows = gyms.Count + (shadowUnlocked ? 1 : 0);
+        // Milestone 30 (relocation): Street Fight moved here from the Home
+        // screen as a first-class progression option, always last in the list.
+        int totalRows = gyms.Count + (shadowUnlocked ? 1 : 0) + 1;
 
         for (int i = 0; i < gyms.Count; i++)
         {
             BuildGymRow(gyms[i], i, totalRows);
         }
         if (shadowUnlocked) BuildShadowRow(gyms.Count, totalRows);
+        BuildStreetFightRow(totalRows - 1, totalRows);
 
         rivalText.text = $"{RivalDatabase.RivalName}: \"{RivalDatabase.GetLine(GM)}\"";
 
@@ -134,6 +137,36 @@ public class GymSelectionScreen : UIScreen
             traveling = false;
             GM.StartShadowChampionBattle();
         });
+    }
+
+    // Milestone 30 (relocation): Street Fight as a first-class progression
+    // option alongside the gyms - same row/button/icon pattern as BuildGymRow,
+    // just always available (no lock state) and not tied to GymDatabase.
+    void BuildStreetFightRow(int index, int totalRows)
+    {
+        string label = "STREET FIGHT\nRandom opponents.\nRisk and reward.\nTrain outside the gym system.";
+
+        GetRowAnchors(index, totalRows, out float yMin, out float yMax);
+
+        var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.06f, yMin), new Vector2(0.94f, yMax),
+            () => GM.ChangeState(GameState.StreetFight), UIFactory.AccentOrange);
+        dynamicEntries.Add(button.gameObject);
+
+        var labelText = button.GetComponentInChildren<Text>();
+        labelText.rectTransform.anchorMin = new Vector2(0.24f, 0f);
+        labelText.rectTransform.anchorMax = new Vector2(0.97f, 1f);
+        labelText.alignment = TextAnchor.MiddleLeft;
+
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconGo.transform.SetParent(button.transform, false);
+        var iconRt = iconGo.GetComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0.04f, 0.18f);
+        iconRt.anchorMax = new Vector2(0.2f, 0.82f);
+        iconRt.offsetMin = Vector2.zero;
+        iconRt.offsetMax = Vector2.zero;
+        var iconImage = iconGo.GetComponent<Image>();
+        iconImage.sprite = IconFactory.GetShapeSprite(IconShape.Diamond);
+        iconImage.color = UIFactory.CreamColor;
     }
 
     void BuildGymRow(GymInfo gym, int index, int totalGyms)

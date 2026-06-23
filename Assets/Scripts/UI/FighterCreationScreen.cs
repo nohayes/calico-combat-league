@@ -51,8 +51,11 @@ public class FighterCreationScreen : UIScreen
             label.rectTransform.anchorMax = new Vector2(0.97f, 0.34f);
 
             Color theme = IconFactory.GetArchetypeThemeColor(info.Type);
-            UIFactory.CreateFighterThumbnail(button.transform, null, info.Type, theme,
+            var thumbnail = UIFactory.CreateFighterThumbnail(button.transform, null, info.Type, theme,
                 new Vector2(0.18f, 0.38f), new Vector2(0.82f, 0.96f));
+            // Milestone 30 (icon integration): the official archetype icon
+            // badges each choice's thumbnail, same as Profile/Battle/Championship.
+            UIFactory.AddDisciplineBadge(thumbnail, info.Type, theme);
             archetypeButtons.Add(button.gameObject);
         }
     }
