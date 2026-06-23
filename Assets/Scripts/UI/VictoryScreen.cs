@@ -11,6 +11,7 @@ public class VictoryScreen : UIScreen
     readonly CanvasGroup rewardGroup;
     readonly Image winnerSprite;
     readonly BattleFighterVisual winnerVisual;
+    readonly RivalDialogueBox rivalDialogue;
 
     public VictoryScreen(Transform parent, GameManager gm) : base(parent, gm, "VictoryScreen", "victory")
     {
@@ -35,6 +36,12 @@ public class VictoryScreen : UIScreen
 
         UIFactory.CreateButton(Root.transform, "RETURN TO MAP", new Vector2(0.50f, 0.09f), new Vector2(0.89f, 0.21f),
             () => GM.ReturnToMap(), UIFactory.PositiveColor);
+
+        // Milestone 33, Part 3/4: real dialogue-box rival encounters (gym
+        // checkpoints, surprise intercepts) instead of the old single inline
+        // text line - reuses the exact popup GymMapScreen's first-appearance
+        // greeting already uses.
+        rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
     }
 
     public void Refresh()
@@ -85,6 +92,21 @@ public class VictoryScreen : UIScreen
         yield return new WaitForSecondsRealtime(0.24f);
         AppendRewardLine($"Level {GM.Player.Stats.Level}");
 
+        // Milestone 32, Part 7: presentation-only stats handed off by
+        // BattleScreen right before EndBattle - reuses the existing reward
+        // tally pacing/animation, no new reward system.
+        if (GM.LastFightTurnCount > 0)
+        {
+            yield return new WaitForSecondsRealtime(0.2f);
+            AppendRewardLine($"Turns Survived: {GM.LastFightTurnCount}");
+        }
+
+        if (!string.IsNullOrEmpty(GM.LastComboUsed))
+        {
+            yield return new WaitForSecondsRealtime(0.2f);
+            AppendRewardLine($"Combo Used: {GM.LastComboUsed}");
+        }
+
         if (moveUnlocked)
         {
             yield return new WaitForSecondsRealtime(0.3f);
@@ -111,20 +133,48 @@ public class VictoryScreen : UIScreen
             AppendHighlightLine("TITLE EARNED: \"SHADOW SLAYER\"");
         }
 
-        // Milestone 29, Part 3/5/6: the rival reacts to a gym checkpoint, or
-        // occasionally chimes in to keep building anticipation. Never both -
-        // a checkpoint clear is already the bigger beat for that fight.
+        // Milestone 33, Part 3/4/8: the rival reacts to a gym checkpoint with a
+        // real dialogue-box encounter, or - failing that - a surprise intercept
+        // (a tough Street Fight win, a level milestone), or - failing that - just
+        // an occasional ambient one-liner. Priority order, never more than one,
+        // so a single victory doesn't get buried in rival reactions.
         if (!shadowVictory)
         {
-            string rivalLine = gymCleared ? RivalDatabase.GetGymClearedLine(GM.CurrentGym?.GymType ?? GymType.Boxing) : null;
-            rivalLine ??= RivalDatabase.GetOccasionalVictoryLine(totalWins);
-            if (!string.IsNullOrEmpty(rivalLine))
+            string[] interceptLines = null;
+
+            if (gymCleared)
             {
-                yield return new WaitForSecondsRealtime(0.35f);
-                AppendHighlightLine($"{RivalDatabase.RivalName}: \"{rivalLine}\"");
+                interceptLines = RivalDatabase.GetGymClearedLines(GM.CurrentGym?.GymType ?? GymType.Boxing);
+            }
+            else if (IsStreetFight() && GM.CurrentStreetFightOpponent != null &&
+                (GM.CurrentStreetFightOpponent.Difficulty == StreetFightDifficulty.Hard ||
+                 GM.CurrentStreetFightOpponent.Difficulty == StreetFightDifficulty.Dangerous))
+            {
+                interceptLines = RivalDatabase.GetStreetFightInterceptLines();
+            }
+            else if (GM.LastVictoryLeveledUpTo > 0 && GM.LastVictoryLeveledUpTo % 5 == 0)
+            {
+                interceptLines = RivalDatabase.GetLevelMilestoneInterceptLines(GM.LastVictoryLeveledUpTo);
+            }
+
+            if (interceptLines != null)
+            {
+                yield return new WaitForSecondsRealtime(0.4f);
+                rivalDialogue.Show(RivalDatabase.RivalName, interceptLines);
+            }
+            else
+            {
+                string occasionalLine = RivalDatabase.GetOccasionalVictoryLine(totalWins);
+                if (!string.IsNullOrEmpty(occasionalLine))
+                {
+                    yield return new WaitForSecondsRealtime(0.35f);
+                    AppendHighlightLine($"{RivalDatabase.RivalName}: \"{occasionalLine}\"");
+                }
             }
         }
     }
+
+    bool IsStreetFight() => GM.CurrentGym?.GymId == "street_fight";
 
     void AppendRewardLine(string line)
     {

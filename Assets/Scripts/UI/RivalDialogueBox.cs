@@ -36,6 +36,11 @@ public class RivalDialogueBox : MonoBehaviour
     {
         if (lines == null || lines.Count == 0) return;
         StopAllCoroutines();
+
+        // Milestone 33, Part 9: "rival intro sound if available" - reuses the
+        // existing crit stinger rather than adding a new audio asset.
+        AudioManager.Instance?.PlayCriticalHit();
+
         this.onComplete = onComplete;
         pendingLines = new List<string>(lines);
         lineIndex = 0;

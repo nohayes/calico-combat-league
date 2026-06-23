@@ -575,10 +575,20 @@ public static class UIFactory
     // Milestone 29: rival dialogue popup. Reuses CreateCard/CreateText and the
     // existing fighter-portrait pipeline (SetFighterPortrait) - click-to-advance
     // only, matching the battle intro's bio/quote beats so lines can't be missed.
+    // Milestone 33, Part 9: added a "RIVAL ENCOUNTER" title card above the box
+    // and the rival's own accent color/motto on the nameplate, so every
+    // appearance reads as the same recognizable, distinct presence.
     public static RivalDialogueBox CreateRivalDialogue(Transform parent)
     {
         var card = CreateCard(parent, "RivalDialogue", new Vector2(0.24f, 0.32f), new Vector2(0.76f, 0.68f),
             new Color(0.07f, 0.06f, 0.06f, 0.97f));
+
+        // Title card: a child of the card itself, anchored above its normal 0-1
+        // bounds, so it fades/activates in lockstep with the card with zero
+        // extra code in RivalDialogueBox.
+        var titleTag = CreateText(card, "RIVAL ENCOUNTER", CaptionSize, RivalDatabase.AccentColor, TextAnchor.MiddleCenter,
+            new Vector2(0f, 1.03f), new Vector2(1f, 1.13f), FontStyle.Bold);
+        titleTag.raycastTarget = false;
 
         var portraitGo = new GameObject("Portrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         portraitGo.transform.SetParent(card, false);
@@ -593,12 +603,19 @@ public static class UIFactory
         Color rivalTheme = IconFactory.GetArchetypeThemeColor(RivalDatabase.PortraitArchetype);
         SetFighterPortrait(portraitImage, RivalDatabase.PortraitId, RivalDatabase.PortraitArchetype, rivalTheme);
 
-        var nameText = CreateText(card, "", BodySize, GoldColor, TextAnchor.MiddleLeft,
-            new Vector2(0.31f, 0.66f), new Vector2(0.97f, 0.88f), FontStyle.Bold);
+        // Nameplate: rival's own accent color (not the generic gold used for
+        // gym opponents) plus a small motto line, so the identity is
+        // recognizable the same way every time the rival shows up.
+        var nameText = CreateText(card, "", BodySize, RivalDatabase.AccentColor, TextAnchor.MiddleLeft,
+            new Vector2(0.31f, 0.78f), new Vector2(0.97f, 0.88f), FontStyle.Bold);
         nameText.raycastTarget = false;
 
+        var mottoText = CreateText(card, $"\"{RivalDatabase.Motto}\"", CaptionSize, MutedTextColor, TextAnchor.MiddleLeft,
+            new Vector2(0.31f, 0.70f), new Vector2(0.97f, 0.77f), FontStyle.Italic);
+        mottoText.raycastTarget = false;
+
         var lineText = CreateText(card, "", SubheadingSize, CreamColor, TextAnchor.MiddleLeft,
-            new Vector2(0.31f, 0.2f), new Vector2(0.97f, 0.66f), FontStyle.Italic);
+            new Vector2(0.31f, 0.18f), new Vector2(0.97f, 0.69f), FontStyle.Italic);
         lineText.raycastTarget = false;
 
         var tapPrompt = CreateText(card, "TAP TO CONTINUE ▸", CaptionSize, MutedTextColor, TextAnchor.MiddleRight,

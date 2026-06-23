@@ -78,6 +78,10 @@ public class ChampionshipScreen : UIScreen
         if (!string.IsNullOrEmpty(lossLine) && GM.CurrentOpponent != null)
             infoText.text += $"\n\n\"{lossLine}\" - {GM.CurrentOpponent.Name}";
 
+        // Milestone 33, Part 5: world-presence line - the rival is already
+        // waiting, reinforcing the showdown tease right after it.
+        infoText.text += $"\n\nWord is {RivalDatabase.RivalName} already qualified for the Finals.";
+
         // Milestone 29, Part 6: the rival's showdown tease - anticipation only, no fight added.
         infoText.text += $"\n\n{RivalDatabase.RivalName}: \"{RivalDatabase.GetShowdownLine()}\"";
     }

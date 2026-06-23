@@ -49,8 +49,8 @@ public class BattleScreen : UIScreen
     readonly Text introPlayerName;
     readonly Text introOpponentName;
     readonly RectTransform introTapeGroup;
-    readonly Text[] tapePlayerValues = new Text[5];
-    readonly Text[] tapeOpponentValues = new Text[5];
+    readonly Text[] tapePlayerValues = new Text[7];
+    readonly Text[] tapeOpponentValues = new Text[7];
     readonly Text introTapPrompt;
     bool introSkipRequested;
     bool waitingForDialogueTap;
@@ -60,7 +60,21 @@ public class BattleScreen : UIScreen
     bool showingItems;
     bool animatingTurn;
 
-    static readonly string[] TapeOfTheTapeLabels = { "LEVEL", "HEALTH", "STRENGTH", "DEFENSE", "SPEED" };
+    // Milestone 32: the opponent's "portrait archetype" used for both the
+    // battle-stage portrait and the intro's Tale of the Tape archetype row -
+    // computed once per Refresh() rather than re-derived in multiple places.
+    ArchetypeType introOpponentArchetype;
+
+    // Milestone 32, Part 7/8: presentation-only counters for the Victory/Defeat
+    // screens - never saved, reset every Refresh(), read by GameManager just
+    // before EndBattle is called.
+    int turnsThisFight;
+    string lastComboNameThisFight;
+
+    // Milestone 32, Part 2: added ARCHETYPE and RECORD - the row-build loop in
+    // the constructor is already parameterized by this array's length, so the
+    // two new rows just slot in automatically with no layout math changes.
+    static readonly string[] TapeOfTheTapeLabels = { "LEVEL", "ARCHETYPE", "HEALTH", "STRENGTH", "DEFENSE", "SPEED", "RECORD" };
 
     static readonly Color HealthColor = new Color(0.62f, 0.13f, 0.12f, 1f);
     static readonly Color StaminaColor = new Color(0.18f, 0.5f, 0.62f, 1f);
@@ -318,6 +332,8 @@ public class BattleScreen : UIScreen
         itemContainer.gameObject.SetActive(false);
         playerFx.ClearPopups();
         opponentFx.ClearPopups();
+        turnsThisFight = 0;
+        lastComboNameThisFight = null;
 
         // Names, portraits and the intro quote only change once per battle, so they're set here rather than every turn.
         string opponentNickname = GM.CurrentOpponentInfo != null && !string.IsNullOrEmpty(GM.CurrentOpponentInfo.Nickname)
@@ -331,11 +347,16 @@ public class BattleScreen : UIScreen
 
         Color playerTheme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
         Color opponentTheme = GM.CurrentGym != null ? IconFactory.GetGymThemeColor(GM.CurrentGym.GymType) : UIFactory.AccentOrange;
-        ArchetypeType opponentArchetype = GM.CurrentGym != null
-            ? IconFactory.GetPortraitArchetype(GM.CurrentGym.GymType)
-            : ArchetypeType.Unspecified;
+        // Milestone 32 fix: Street Fight opponents carry their own randomly
+        // rolled portrait archetype (set when the opponent was generated) -
+        // previously this always fell through to the synthetic gym's
+        // GymType.Boxing default, so every Street Fight opponent's portrait
+        // silently showed as a Boxer regardless of what was actually rolled.
+        introOpponentArchetype = IsStreetFight() && GM.CurrentStreetFightOpponent != null
+            ? GM.CurrentStreetFightOpponent.PortraitArchetype
+            : (GM.CurrentGym != null ? IconFactory.GetPortraitArchetype(GM.CurrentGym.GymType) : ArchetypeType.Unspecified);
         UIFactory.SetPlayerAvatar(playerPortrait, GM.Player.Archetype, playerTheme);
-        UIFactory.SetFighterPortrait(opponentPortrait, GM.CurrentOpponentInfo?.OpponentId, opponentArchetype, opponentTheme);
+        UIFactory.SetFighterPortrait(opponentPortrait, GM.CurrentOpponentInfo?.OpponentId, introOpponentArchetype, opponentTheme);
 
         UIFactory.AddDisciplineBadge(playerPortrait.transform.parent, GM.Player.Archetype, playerTheme);
         if (GM.CurrentGym != null)
@@ -361,7 +382,7 @@ public class BattleScreen : UIScreen
         opponentCombatantRoot.anchorMin = championshipFight ? new Vector2(0.51f, 0.01f) : new Vector2(0.52f, 0.03f);
         opponentCombatantRoot.anchorMax = championshipFight ? new Vector2(0.99f, 1f) : new Vector2(0.96f, 0.98f);
         playerCombatant.Initialize(playerBattleSprite, "player", GM.Player.Archetype, playerTheme, faceRight: true);
-        opponentCombatant.Initialize(opponentBattleSprite, GM.CurrentOpponentInfo?.OpponentId, opponentArchetype,
+        opponentCombatant.Initialize(opponentBattleSprite, GM.CurrentOpponentInfo?.OpponentId, introOpponentArchetype,
             opponentTheme, faceRight: false);
         stageGroup.alpha = 0f;
 
@@ -411,7 +432,7 @@ public class BattleScreen : UIScreen
         bool rematch = leaderFight && GM.HasBecomeChampion();
 
         introBillingText.text = GetFightBilling();
-        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch);
+        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight());
         introText.text = "";
         introMatchupGroup.gameObject.SetActive(true);
         introTapeGroup.gameObject.SetActive(false);
@@ -431,6 +452,22 @@ public class BattleScreen : UIScreen
         // to advance (Part 5) instead of an auto-timed skip, with a portrait pop
         // (Part 7) and a larger font (Part 4) to make them feel noticeable.
         introText.fontSize = UIFactory.SubheadingSize + 4;
+
+        // Milestone 32, Part 10: the Street Fight risk/reward reveal. Difficulty
+        // stays hidden on StreetFightScreen itself (the player takes the risk by
+        // choosing to fight at all) - it's only safe to reveal now, after the
+        // player has already committed and the fight is actually starting.
+        if (IsStreetFight() && GM.CurrentStreetFightOpponent != null && GM.CurrentOpponentInfo != null)
+        {
+            var sf = GM.CurrentStreetFightOpponent;
+            introText.text = $"DIFFICULTY: {sf.Difficulty.ToString().ToUpper()}\n" +
+                $"Reward: {GM.CurrentOpponentInfo.RewardXP} XP / {GM.CurrentOpponentInfo.RewardCoins} Coins\n" +
+                $"{GetStreetFightFlavor(sf.Difficulty)}";
+            introText.color = UIFactory.GoldColor;
+            PlayPulse(introText.rectTransform, 1.15f, 0.3f);
+            yield return WaitForDialogueTap();
+        }
+
         string bio = GM.CurrentOpponentInfo?.Bio;
         if (!string.IsNullOrEmpty(bio))
         {
@@ -450,7 +487,7 @@ public class BattleScreen : UIScreen
         }
         introText.fontSize = UIFactory.SubheadingSize;
 
-        introText.text = championship ? "CHAMPIONSHIP BOUT" : leaderFight ? "LEADER CHALLENGE" : "READY";
+        introText.text = championship ? "CHAMPIONSHIP BOUT" : leaderFight ? "LEADER CHALLENGE" : IsStreetFight() ? "STREET FIGHT" : "READY";
         introText.color = UIFactory.GoldColor;
         PlayPulse(introText.rectTransform, championship ? 1.18f : leaderFight ? 1.12f : 1.08f, 0.3f);
         yield return WaitSkippable(championship ? 0.55f : leaderFight ? 0.4f : 0.28f);
@@ -538,22 +575,39 @@ public class BattleScreen : UIScreen
         introTapPrompt.gameObject.SetActive(false);
     }
 
-    // Tale of the Tape (Part 2): existing stat data only, no new stats.
+    // Tale of the Tape (Part 2): existing stat data only, no new stats. Milestone
+    // 32 adds ARCHETYPE (derived the same way the portrait already is - no new
+    // data) and RECORD (the player's existing lifetime TotalWins/TotalLosses;
+    // opponents don't have an individual record tracked anywhere, so per the
+    // brief that field is skipped for them rather than inventing one).
     void PopulateTapeOfTheTape()
     {
         var p = GM.Player.Stats;
         var o = GM.CurrentOpponent.Stats;
         SetTapeRow(0, p.Level, o.Level);
-        SetTapeRow(1, p.MaxHealth, o.MaxHealth);
-        SetTapeRow(2, p.Strength, o.Strength);
-        SetTapeRow(3, p.Defense, o.Defense);
-        SetTapeRow(4, p.Speed, o.Speed);
+
+        string playerArchetype = ArchetypeDatabase.GetByType(GM.Player.Archetype)?.DisplayName ?? "Fighter";
+        string opponentArchetypeName = ArchetypeDatabase.GetByType(introOpponentArchetype)?.DisplayName ?? "Fighter";
+        SetTapeRow(1, playerArchetype, opponentArchetypeName);
+
+        SetTapeRow(2, p.MaxHealth, o.MaxHealth);
+        SetTapeRow(3, p.Strength, o.Strength);
+        SetTapeRow(4, p.Defense, o.Defense);
+        SetTapeRow(5, p.Speed, o.Speed);
+
+        SetTapeRow(6, $"{GM.TotalWins}-{GM.TotalLosses}", "-");
     }
 
     void SetTapeRow(int index, int playerValue, int opponentValue)
     {
         tapePlayerValues[index].text = playerValue.ToString();
         tapeOpponentValues[index].text = opponentValue.ToString();
+    }
+
+    void SetTapeRow(int index, string playerValue, string opponentValue)
+    {
+        tapePlayerValues[index].text = playerValue;
+        tapeOpponentValues[index].text = opponentValue;
     }
 
     bool IsChampionshipFight()
@@ -567,6 +621,11 @@ public class BattleScreen : UIScreen
             GM.CurrentGym.Leader.OpponentId == GM.CurrentOpponentInfo.OpponentId;
     }
 
+    // Milestone 32, Part 10: matches the synthetic GymInfo GameManager.StartStreetFight
+    // creates (GymId "street_fight", no Leader) - same marker GameManager itself
+    // relies on for "this fight shouldn't touch gym progression."
+    bool IsStreetFight() => GM.CurrentGym?.GymId == "street_fight";
+
     string GetFightBilling()
     {
         var gym = GM.CurrentGym;
@@ -575,16 +634,32 @@ public class BattleScreen : UIScreen
 
         if (gym != null && gym.GymType == GymType.Championship && isLeader)
             return "CHAMPIONSHIP BOUT";
+        if (IsStreetFight())
+            return "STREET FIGHT";
         if (isLeader)
             return gym != null ? $"{gym.GymName.ToUpper()} MAIN EVENT" : "MAIN EVENT";
         return gym != null ? $"{gym.GymName.ToUpper()} SHOWDOWN" : "TONIGHT'S FEATURED MATCHUP";
     }
 
-    static string GetFightAnnouncement(bool championship, bool leaderFight, bool rematch)
+    static string GetFightAnnouncement(bool championship, bool leaderFight, bool rematch, bool streetFight)
     {
         if (championship) return "Championship fight!";
+        if (streetFight) return "Random opponent. Anything can happen.";
         if (leaderFight) return rematch ? "Contender matchup!" : "Gym leader challenge!";
         return "Tonight's featured bout!";
+    }
+
+    // Milestone 32, Part 10: flavor only, shown during the intro reveal beat -
+    // after the player has already committed to the fight from StreetFightScreen.
+    static string GetStreetFightFlavor(StreetFightDifficulty difficulty)
+    {
+        switch (difficulty)
+        {
+            case StreetFightDifficulty.Easy: return "Looks manageable.";
+            case StreetFightDifficulty.Normal: return "Anything can happen.";
+            case StreetFightDifficulty.Hard: return "This one's gonna hurt.";
+            default: return "...This looks dangerous.";
+        }
     }
 
     void UpdateBars(bool instant = false)
@@ -625,6 +700,27 @@ public class BattleScreen : UIScreen
             names.Add(move != null ? move.Name : id);
         }
         chainText.text = "Chain: " + string.Join(" -> ", names);
+    }
+
+    // Milestone 32, Part 7: parses the log text for the combo-trigger line
+    // BattleSystem already emits, the same way the rest of this file reads
+    // combat feedback from log strings - no new combo-system hooks needed.
+    // Whichever fighter's combo appears last in the turn "wins" the credit;
+    // since combos are rare and this is presentation-only, that's fine.
+    void CaptureComboFromLog(List<string> lines)
+    {
+        foreach (var line in lines)
+        {
+            if (!line.Contains("lands a COMBO!")) continue;
+            foreach (var combo in ComboDatabase.All)
+            {
+                if (line.Contains(combo.DisplayName))
+                {
+                    lastComboNameThisFight = combo.DisplayName;
+                    break;
+                }
+            }
+        }
     }
 
     string FormatEffects(FighterData fighter)
@@ -688,6 +784,8 @@ public class BattleScreen : UIScreen
 
         var turnLog = new List<string>();
         var result = GM.CurrentBattle.PlayerUseMove(move, turnLog);
+        turnsThisFight++;
+        CaptureComboFromLog(turnLog);
 
         int dealt = Mathf.Max(0, opponentHpBefore - GM.CurrentOpponent.Stats.CurrentHealth);
         int taken = Mathf.Max(0, playerHpBefore - GM.Player.Stats.CurrentHealth);
@@ -715,6 +813,8 @@ public class BattleScreen : UIScreen
 
         var turnLog = new List<string>();
         var result = GM.CurrentBattle.PlayerRecover(turnLog);
+        turnsThisFight++;
+        CaptureComboFromLog(turnLog);
 
         int dealt = Mathf.Max(0, opponentHpBefore - GM.CurrentOpponent.Stats.CurrentHealth);
         int taken = Mathf.Max(0, playerHpBefore - GM.Player.Stats.CurrentHealth);
@@ -833,6 +933,12 @@ public class BattleScreen : UIScreen
             // its Type (the player can still technically "win" on a Recover
             // turn if a bleed tick finishes the opponent during their turn).
             bool submissionFinish = result == BattleResult.PlayerWon && selectedMove != null && selectedMove.Type == MoveType.BrazilianJiuJitsu;
+
+            // Milestone 32, Part 7/8: hand off this fight's presentation-only
+            // stats so Victory/Defeat can show them.
+            GM.LastFightTurnCount = turnsThisFight;
+            GM.LastComboUsed = lastComboNameThisFight;
+
             GM.EndBattle(result, submissionFinish);
             yield break;
         }

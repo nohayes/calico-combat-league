@@ -19,6 +19,18 @@ public class GameManager : MonoBehaviour
     public bool LastVictoryUnlockedGym { get; private set; }
     public string LastUnlockedMoveName { get; private set; }
 
+    // Milestone 32: presentation-only, set by BattleScreen right before EndBattle
+    // is called - never saved, never affects progression, purely for the
+    // Victory/Defeat screens' "Combo used" / "Turns survived" callouts.
+    public int LastFightTurnCount { get; set; }
+    public string LastComboUsed { get; set; }
+
+    // Milestone 33, Part 4: presentation-only, set inside EndBattle itself
+    // (right after AddXP) - the player's level if THIS fight's XP caused a
+    // level-up, otherwise 0. Used only to decide whether to show a rival
+    // level-milestone intercept on the Victory screen.
+    public int LastVictoryLeveledUpTo { get; set; }
+
     // ---------- Lifetime stats (persist across StartNewGame/StartFreshGame - see Milestone 11) ----------
 
     public int TotalWins { get; private set; }
@@ -255,7 +267,13 @@ public class GameManager : MonoBehaviour
                 LastRewardXP = Mathf.RoundToInt(LastRewardXP * RematchRewardMultiplier);
                 LastRewardCoins = Mathf.RoundToInt(LastRewardCoins * RematchRewardMultiplier);
             }
+            int levelBeforeReward = Player.Stats.Level;
             Player.Stats.AddXP(LastRewardXP);
+            // Milestone 33, Part 4: 0 unless THIS fight's XP actually crossed a
+            // level boundary - must be computed here (right after AddXP, before
+            // ChangeState fires VictoryScreen.Refresh synchronously) rather than
+            // by the caller, which would still be reading the pre-reward level.
+            LastVictoryLeveledUpTo = Player.Stats.Level > levelBeforeReward ? Player.Stats.Level : 0;
             Player.Stats.Coins += LastRewardCoins;
             TotalCoinsEarned += LastRewardCoins;
             TotalWins++;
@@ -284,6 +302,14 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            // Milestone 32: a loss grants no reward, but LastRewardXP/Coins were
+            // only ever assigned in the win branch above - without this they'd
+            // still hold whatever the player's most recent WIN was, and the new
+            // Defeat screen would show that stale number as if it were earned
+            // from this fight.
+            LastRewardXP = 0;
+            LastRewardCoins = 0;
+            LastVictoryLeveledUpTo = 0;
             TotalLosses++;
             CheckAchievements();
             SaveGame();

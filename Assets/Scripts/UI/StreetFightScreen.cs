@@ -10,6 +10,7 @@ public class StreetFightScreen : UIScreen
 {
     readonly Text opponentNameText;
     readonly Image opponentPortrait;
+    readonly Text worldPresenceText;
 
     public StreetFightScreen(Transform parent, GameManager gm) : base(parent, gm, "StreetFightScreen", "gym_map")
     {
@@ -41,7 +42,7 @@ public class StreetFightScreen : UIScreen
             new Vector2(0.15f, 0.24f), new Vector2(0.85f, 0.32f), TextAnchor.MiddleCenter);
         rewardRangeText.color = UIFactory.MutedTextColor;
 
-        UIFactory.CreateCaption(Root.transform, "Great for training before gym leaders.",
+        worldPresenceText = UIFactory.CreateCaption(Root.transform, "",
             new Vector2(0.15f, 0.18f), new Vector2(0.85f, 0.24f), TextAnchor.MiddleCenter);
 
         UIFactory.CreateButton(Root.transform, "START FIGHT", new Vector2(0.42f, 0.10f), new Vector2(0.85f, 0.165f),
@@ -56,6 +57,11 @@ public class StreetFightScreen : UIScreen
     public void Refresh()
     {
         if (GM.Player == null) return;
+
+        // Milestone 33, Part 5: world presence - folded into the existing tip
+        // caption rather than adding a new element.
+        worldPresenceText.text = $"Great for training before gym leaders.\nPeople are talking about {RivalDatabase.RivalName}.";
+
         Reroll();
     }
 

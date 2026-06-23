@@ -9,6 +9,20 @@ public class DefeatScreen : UIScreen
     readonly Image defeatedSprite;
     readonly BattleFighterVisual defeatedVisual;
     readonly Text opponentLineText;
+    readonly Text rewardText;
+    readonly Text tipText;
+
+    // Milestone 32, Part 8: rotated by lifetime loss count so the same phrase
+    // doesn't show every single time - no new save state, just an index into
+    // a fixed array.
+    static readonly string[] EncouragingHeadlines = { "BETTER LUCK NEXT TIME", "BACK TO TRAINING", "COME BACK STRONGER" };
+
+    static readonly string[] Tips =
+    {
+        "Tip: Recover when your stamina runs low instead of forcing a heavy move.",
+        "Tip: Cheap moves add up - try chaining Jab, Jab, Cross for a damage bonus.",
+        "Tip: Street Fights are good practice and grinding before a gym leader."
+    };
 
     public DefeatScreen(Transform parent, GameManager gm) : base(parent, gm, "DefeatScreen", "defeat")
     {
@@ -28,12 +42,18 @@ public class DefeatScreen : UIScreen
         messageRect = message.rectTransform;
         messageGroup = message.gameObject.AddComponent<CanvasGroup>();
 
-        UIFactory.CreateCaption(Root.transform, "No penalty - your fighter is fully rested back at the map.",
+        tipText = UIFactory.CreateCaption(Root.transform, "",
             new Vector2(0.42f, 0.40f), new Vector2(0.97f, 0.49f), TextAnchor.MiddleCenter);
 
         // Milestone 22: the opponent's reaction to beating the player.
         opponentLineText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.42f, 0.30f), new Vector2(0.97f, 0.38f), TextAnchor.MiddleCenter);
         opponentLineText.color = UIFactory.GoldColor;
+
+        // Milestone 32, Part 8: XP/coins earned, if any - currently a defeat
+        // always grants 0 of both, so this stays hidden in practice, but it's
+        // correct and ready if a future milestone ever adds a consolation reward.
+        rewardText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.42f, 0.23f), new Vector2(0.97f, 0.29f), TextAnchor.MiddleCenter);
+        rewardText.color = UIFactory.MutedTextColor;
 
         UIFactory.CreateButton(Root.transform, "RETURN TO MAP", new Vector2(0.50f, 0.10f), new Vector2(0.89f, 0.22f),
             () => GM.ReturnToMap(), UIFactory.SecondaryColor);
@@ -44,6 +64,19 @@ public class DefeatScreen : UIScreen
         AudioManager.Instance?.PlayDefeat();
         PlayExhausted(defeatHeading);
         PlayReveal(messageGroup, messageRect, 0.2f, 0.35f);
+
+        // Milestone 32, Part 8: rotate the headline so a loss reads as
+        // encouraging rather than just "DEFEATED" every time.
+        int variant = Mathf.Abs(GM.TotalLosses - 1) % EncouragingHeadlines.Length;
+        defeatHeading.GetComponent<Text>().text = EncouragingHeadlines[variant];
+
+        string tip = Tips[Mathf.Abs(GM.TotalLosses) % Tips.Length];
+        tipText.text = $"No penalty - your fighter is fully rested back at the map.\n{tip}";
+
+        if (GM.LastRewardXP > 0 || GM.LastRewardCoins > 0)
+            rewardText.text = $"Earned: +{GM.LastRewardXP} XP, +{GM.LastRewardCoins} Coins";
+        else
+            rewardText.text = "";
 
         string winLine = GM.CurrentOpponentInfo?.WinLine;
         opponentLineText.text = !string.IsNullOrEmpty(winLine) && GM.CurrentOpponent != null

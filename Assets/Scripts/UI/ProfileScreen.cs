@@ -89,7 +89,13 @@ public class ProfileScreen : UIScreen
             $"Gyms Cleared (this run): {GM.TotalGymsCleared} / {GymDatabase.AllGyms.Count}\n" +
             $"Achievements: {unlockedAchievements} / {AchievementDatabase.All.Count}";
 
-        statusText.text = isChampion ? "CHAMPION" : "Not yet champion";
+        // Milestone 33, Part 1/2/6: the rival's recognizable identity (name,
+        // archetype, motto) plus the Rival Tracker status and narrative record -
+        // all read from RivalDatabase/GameManager, no new save state.
+        string rivalArchetypeName = ArchetypeDatabase.GetByType(RivalDatabase.PortraitArchetype)?.DisplayName ?? "Fighter";
+        statusText.text = $"{(isChampion ? "CHAMPION" : "Not yet champion")}\n" +
+            $"RIVAL: {RivalDatabase.RivalName} ({rivalArchetypeName}) - {RivalDatabase.GetRivalStatus(GM)}\n" +
+            $"Record: {RivalDatabase.GetRivalRecord(GM)}   -   \"{RivalDatabase.Motto}\"";
     }
 
     void SetChampionBadge(bool show)

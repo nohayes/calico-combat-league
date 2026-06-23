@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,6 +22,12 @@ public class GymSelectionScreen : UIScreen
     readonly PlayerAvatarVisual avatarVisual;
     int avatarGymIndex = -1;
     bool traveling;
+
+    // Milestone 33, Part 4: a brief rival intercept the first time a gym other
+    // than the very first becomes newly unlocked. Set during the row-build
+    // loop, consumed once at the end of Refresh() so it can't pop up mid-layout.
+    readonly RivalDialogueBox rivalDialogue;
+    GymInfo pendingInterceptGym;
 
     const float TravelDuration = 0.4f;
     const float ListMinY = 0.14f;
@@ -46,12 +53,15 @@ public class GymSelectionScreen : UIScreen
 
         UIFactory.CreateButton(Root.transform, "BACK TO HOME", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+
+        rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
     }
 
     public void Refresh()
     {
         foreach (var entry in dynamicEntries) Object.Destroy(entry);
         dynamicEntries.Clear();
+        pendingInterceptGym = null;
 
         var gyms = GymDatabase.AllGyms;
         if (gyms == null || gyms.Count == 0)
@@ -75,7 +85,16 @@ public class GymSelectionScreen : UIScreen
         if (shadowUnlocked) BuildShadowRow(gyms.Count, totalRows);
         BuildStreetFightRow(totalRows - 1, totalRows);
 
-        rivalText.text = $"{RivalDatabase.RivalName}: \"{RivalDatabase.GetLine(GM)}\"";
+        // Milestone 33, Part 2/5: the rival's existing progress quip plus the
+        // Rival Tracker status, so this screen doubles as "world presence."
+        rivalText.text = $"{RivalDatabase.RivalName}: \"{RivalDatabase.GetLine(GM)}\"\n{RivalDatabase.GetRivalStatus(GM)}";
+
+        if (pendingInterceptGym != null)
+        {
+            var gym = pendingInterceptGym;
+            pendingInterceptGym = null;
+            RunAnimation(ShowGymInterceptDelayed(gym));
+        }
 
         avatarMarker.gameObject.SetActive(GM.Player != null);
         if (GM.Player == null) return;
@@ -185,7 +204,13 @@ public class GymSelectionScreen : UIScreen
         dynamicEntries.Add(button.gameObject);
 
         if (unlocked && seenUnlockedGymIds.Add(gym.GymId))
+        {
             PlayPulse((RectTransform)button.transform, 1.08f, 0.5f);
+            // Milestone 33, Part 4: skip the very first gym - the rival's
+            // FirstAppearanceLines greeting on the Home screen already covers
+            // the start of the run.
+            if (index > 0) pendingInterceptGym = gym;
+        }
 
         // Make room for an icon on the left of the auto-generated label.
         var labelText = button.GetComponentInChildren<Text>();
@@ -221,6 +246,14 @@ public class GymSelectionScreen : UIScreen
             avatarGymIndex = index;
             GM.EnterGym(gym);
         });
+    }
+
+    // Milestone 33, Part 4: a short pause after the screen settles, same
+    // pattern GymMapScreen's first-appearance greeting already uses.
+    IEnumerator ShowGymInterceptDelayed(GymInfo gym)
+    {
+        yield return new WaitForSecondsRealtime(0.5f);
+        rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.GetGymInterceptLines(gym));
     }
 
     void SnapAvatarToRow(int index, int totalGyms)
