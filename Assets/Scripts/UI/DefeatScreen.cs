@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,6 +12,7 @@ public class DefeatScreen : UIScreen
     readonly Text opponentLineText;
     readonly Text rewardText;
     readonly Text tipText;
+    readonly RivalDialogueBox rivalDialogue;
 
     // Milestone 32, Part 8: rotated by lifetime loss count so the same phrase
     // doesn't show every single time - no new save state, just an index into
@@ -57,6 +59,11 @@ public class DefeatScreen : UIScreen
 
         UIFactory.CreateButton(Root.transform, "RETURN TO MAP", new Vector2(0.50f, 0.10f), new Vector2(0.89f, 0.22f),
             () => GM.ReturnToMap(), UIFactory.SecondaryColor);
+
+        // Milestone 34, Part 9: the Rival Showdown's defeat payoff - does not
+        // softlock anything, the Rival Showdown row simply stays available to
+        // retry from Gym Selection.
+        rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
     }
 
     public void Refresh()
@@ -78,10 +85,15 @@ public class DefeatScreen : UIScreen
         else
             rewardText.text = "";
 
+        bool rivalDefeat = GM.CurrentOpponentInfo?.OpponentId == GameManager.RivalFightOpponentId;
+
         string winLine = GM.CurrentOpponentInfo?.WinLine;
-        opponentLineText.text = !string.IsNullOrEmpty(winLine) && GM.CurrentOpponent != null
+        opponentLineText.text = !rivalDefeat && !string.IsNullOrEmpty(winLine) && GM.CurrentOpponent != null
             ? $"\"{winLine}\" - {GM.CurrentOpponent.Name}"
             : "";
+
+        if (rivalDefeat)
+            RunAnimation(ShowRivalVictoryDelayed());
 
         if (GM.Player != null)
         {
@@ -89,5 +101,13 @@ public class DefeatScreen : UIScreen
             defeatedVisual.Initialize(defeatedSprite, "player", GM.Player.Archetype, theme, faceRight: true);
             defeatedVisual.PlayDefeatPose();
         }
+    }
+
+    // Milestone 34, Part 9: a short pause after the screen's own reveal
+    // finishes, same pattern every other rival dialogue trigger uses.
+    IEnumerator ShowRivalVictoryDelayed()
+    {
+        yield return new WaitForSecondsRealtime(0.4f);
+        rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.RivalVictoryLines);
     }
 }

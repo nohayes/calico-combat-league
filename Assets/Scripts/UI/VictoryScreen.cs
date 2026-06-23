@@ -49,15 +49,20 @@ public class VictoryScreen : UIScreen
         bool gymCleared = GM.LastVictoryUnlockedGym;
         bool moveUnlocked = !string.IsNullOrEmpty(GM.LastUnlockedMoveName);
         bool shadowVictory = GM.CurrentOpponentInfo?.OpponentId == GameManager.ShadowChampionId;
+        // Milestone 34, Part 8: the Rival Showdown payoff.
+        bool rivalVictory = GM.CurrentOpponentInfo?.OpponentId == GameManager.RivalFightOpponentId;
 
+        // Milestone 35, Part 7: rival_victory.mp3 is now its own dedicated cue,
+        // distinct from the Championship sound shadowVictory still uses.
         if (shadowVictory) AudioManager.Instance?.PlayChampionVictory();
+        else if (rivalVictory) AudioManager.Instance?.PlayRivalVictory();
         else if (gymCleared) AudioManager.Instance?.PlayGymCleared();
         else AudioManager.Instance?.PlayVictory();
 
-        PlayCelebration(shadowVictory ? 30 : (gymCleared ? 24 : 16));
+        PlayCelebration(shadowVictory ? 30 : (rivalVictory ? 26 : (gymCleared ? 24 : 16)));
         var headingText = victoryHeading.GetComponent<Text>();
-        headingText.text = shadowVictory ? "YOU DEFEATED YOUR SHADOW" : "VICTORY!";
-        PlayPulse(victoryHeading, shadowVictory ? 1.2f : (gymCleared ? 1.12f : 1.08f), shadowVictory ? 0.65f : 0.55f);
+        headingText.text = shadowVictory ? "YOU DEFEATED YOUR SHADOW" : rivalVictory ? "RIVAL DEFEATED" : "VICTORY!";
+        PlayPulse(victoryHeading, shadowVictory ? 1.2f : rivalVictory ? 1.18f : (gymCleared ? 1.12f : 1.08f), shadowVictory ? 0.65f : 0.55f);
         PlayReveal(rewardGroup, rewardCard, 0.22f, 0.38f);
 
         highlightText.text = "";
@@ -73,7 +78,7 @@ public class VictoryScreen : UIScreen
         winnerVisual.Initialize(winnerSprite, "player", GM.Player.Archetype, theme, faceRight: true);
         winnerVisual.PlayVictoryPose(champion: GM.HasBecomeChampion(), leader: false);
 
-        RunAnimation(RewardRevealRoutine(moveUnlocked, gymCleared, shadowVictory, GM.TotalWins));
+        RunAnimation(RewardRevealRoutine(moveUnlocked, gymCleared, shadowVictory, rivalVictory, GM.TotalWins));
     }
 
     // Part 5 (Fight Night presentation): rewards tally one at a time instead of
@@ -81,7 +86,7 @@ public class VictoryScreen : UIScreen
     // landing last as the "big" beats. Reuses only the existing PlayPulse helper.
     // Milestone 26: a defeated Shadow Champion adds one more beat - the unique
     // title reveal - after the opponent's own parting line.
-    IEnumerator RewardRevealRoutine(bool moveUnlocked, bool gymCleared, bool shadowVictory, int totalWins)
+    IEnumerator RewardRevealRoutine(bool moveUnlocked, bool gymCleared, bool shadowVictory, bool rivalVictory, int totalWins)
     {
         yield return new WaitForSecondsRealtime(0.3f);
         AppendRewardLine($"+{GM.LastRewardXP} XP");
@@ -91,6 +96,11 @@ public class VictoryScreen : UIScreen
 
         yield return new WaitForSecondsRealtime(0.24f);
         AppendRewardLine($"Level {GM.Player.Stats.Level}");
+        // Milestone 35, Part 5: GM.LastVictoryLeveledUpTo (added in Milestone
+        // 34) is exactly "0 unless this fight's XP just crossed a level
+        // boundary" - the right signal for a one-time level-up cue, since this
+        // reward line itself shows the current level on every victory regardless.
+        if (GM.LastVictoryLeveledUpTo > 0) AudioManager.Instance?.PlayLevelUp();
 
         // Milestone 32, Part 7: presentation-only stats handed off by
         // BattleScreen right before EndBattle - reuses the existing reward
@@ -119,9 +129,21 @@ public class VictoryScreen : UIScreen
             AppendHighlightLine("GYM CLEARED!");
         }
 
+        // Milestone 34, Part 10: the Rival Showdown's actual unlock effect is
+        // just IsGymUnlocked now also passing for the Championship Gym (see
+        // GameManager) - this is purely the messaging for that, reusing the
+        // exact same highlight-reveal beat as every other big moment here.
+        if (rivalVictory)
+        {
+            yield return new WaitForSecondsRealtime(0.3f);
+            AppendHighlightLine("CHAMPIONSHIP UNLOCKED!");
+            yield return new WaitForSecondsRealtime(0.2f);
+            AppendHighlightLine("The road to the title is open.");
+        }
+
         // Milestone 22: the opponent gets the last word - their reaction to losing.
         string lossLine = GM.CurrentOpponentInfo?.LossLine;
-        if (!string.IsNullOrEmpty(lossLine))
+        if (!string.IsNullOrEmpty(lossLine) && !rivalVictory)
         {
             yield return new WaitForSecondsRealtime(0.3f);
             AppendHighlightLine($"\"{lossLine}\" - {GM.CurrentOpponent.Name}");
@@ -133,12 +155,16 @@ public class VictoryScreen : UIScreen
             AppendHighlightLine("TITLE EARNED: \"SHADOW SLAYER\"");
         }
 
-        // Milestone 33, Part 3/4/8: the rival reacts to a gym checkpoint with a
-        // real dialogue-box encounter, or - failing that - a surprise intercept
-        // (a tough Street Fight win, a level milestone), or - failing that - just
-        // an occasional ambient one-liner. Priority order, never more than one,
-        // so a single victory doesn't get buried in rival reactions.
-        if (!shadowVictory)
+        // Milestone 33/34, Part 3/4/8: the rival reacts to defeating HIM (the
+        // biggest beat) or, failing that, a gym checkpoint, or a surprise
+        // intercept, or - failing all of those - just an occasional ambient
+        // one-liner. Priority order, never more than one.
+        if (rivalVictory)
+        {
+            yield return new WaitForSecondsRealtime(0.4f);
+            rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.RivalDefeatedLines);
+        }
+        else if (!shadowVictory)
         {
             string[] interceptLines = null;
 

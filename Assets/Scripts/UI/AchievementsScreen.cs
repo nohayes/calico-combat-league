@@ -19,7 +19,7 @@ public class AchievementsScreen : UIScreen
         listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.14f), new Vector2(0.85f, 0.82f));
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
-            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
     }
 
     public void Refresh()

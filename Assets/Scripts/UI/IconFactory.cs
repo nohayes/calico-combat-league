@@ -144,6 +144,8 @@ public static class IconFactory
             case AchievementMetric.BecameChampion: return IconShape.Star;
             case AchievementMetric.CoinsSpent: return IconShape.Circle;
             case AchievementMetric.MovesKnown: return IconShape.Diamond;
+            case AchievementMetric.DefeatedRival: return IconShape.Star;
+            case AchievementMetric.DefeatedSecretFighter: return IconShape.Diamond;
             default: return IconShape.Circle;
         }
     }
@@ -163,6 +165,8 @@ public static class IconFactory
             case AchievementMetric.CoinsSpent:
                 return "ECONOMY";
             case AchievementMetric.BecameChampion:
+            case AchievementMetric.DefeatedRival:
+            case AchievementMetric.DefeatedSecretFighter:
                 return "LEGACY";
             default:
                 return "LEAGUE";

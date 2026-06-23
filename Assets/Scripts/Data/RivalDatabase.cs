@@ -82,7 +82,9 @@ public static class RivalDatabase
             case 1: return "Training at the Muay Thai Gym.";
             case 2: return "Training at the Wrestling Gym.";
             case 3: return "Preparing for the BJJ Academy.";
-            default: return "Preparing for the Championship.";
+            // Milestone 34: this window covers "BJJ cleared, Championship not
+            // cleared yet" - which is exactly the Rival Showdown gate.
+            default: return gm.HasDefeatedRival ? "Waiting at the Championship Gym." : "Waiting for you. This is it.";
         }
     }
 
@@ -116,6 +118,32 @@ public static class RivalDatabase
     {
         return new[] { $"Level {level} already? ...Fine. Maybe you're not hopeless." };
     }
+
+    // Milestone 34, Part 2: shown once, right before the Rival Showdown fight
+    // itself - the payoff to four milestones of buildup.
+    public static readonly string[] ShowdownIntroLines =
+    {
+        "You finally caught up.",
+        "Let's see if you're actually good.",
+        "No more speeches. Fight me."
+    };
+
+    // Milestone 34, Part 8: shown when the player wins the Rival Showdown.
+    public static readonly string[] RivalDefeatedLines =
+    {
+        "Huh.",
+        "Guess you earned it.",
+        "Don't get comfortable."
+    };
+
+    // Milestone 34, Part 9: shown when Scratch wins the Rival Showdown -
+    // encouraging, not punishing. The player can simply challenge him again.
+    public static readonly string[] RivalVictoryLines =
+    {
+        "Still not there.",
+        "Come back when you're ready.",
+        "You almost had me."
+    };
 
     // Part 6: shown once on the Championship screen - anticipation, not a fight.
     public static string GetShowdownLine()

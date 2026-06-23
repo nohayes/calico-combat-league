@@ -51,7 +51,7 @@ public class StreetFightScreen : UIScreen
             OnReroll, UIFactory.SecondaryColor);
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.40f, 0.02f), new Vector2(0.60f, 0.09f),
-            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
     }
 
     public void Refresh()

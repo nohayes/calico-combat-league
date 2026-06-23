@@ -136,7 +136,24 @@ public class GameManager : MonoBehaviour
     public bool IsGymUnlocked(GymInfo gym)
     {
         if (gym == null) return false;
-        return string.IsNullOrEmpty(gym.RequiredGymId) || completedGymIds.Contains(gym.RequiredGymId);
+        bool prerequisiteMet = string.IsNullOrEmpty(gym.RequiredGymId) || completedGymIds.Contains(gym.RequiredGymId);
+
+        // Milestone 34, Part 1: the Championship Gym additionally requires
+        // defeating Rival Scratch first - the prerequisite gym (BJJ) alone is
+        // no longer enough. GymSelectionScreen shows the Rival Showdown row
+        // in the gap between "BJJ cleared" and "rival defeated."
+        if (gym.GymType == GymType.Championship) return prerequisiteMet && HasDefeatedRival;
+        return prerequisiteMet;
+    }
+
+    // Milestone 34, Part 1: true exactly in the gap between "prerequisite gym
+    // cleared" and "rival defeated" - the window where GymSelectionScreen
+    // should show the Rival Showdown encounter instead of a locked Championship row.
+    public bool IsRivalFightReady(GymInfo championshipGym)
+    {
+        if (championshipGym == null || championshipGym.GymType != GymType.Championship) return false;
+        bool prerequisiteMet = string.IsNullOrEmpty(championshipGym.RequiredGymId) || completedGymIds.Contains(championshipGym.RequiredGymId);
+        return prerequisiteMet && !HasDefeatedRival;
     }
 
     public bool IsGymCompleted(GymInfo gym)
@@ -225,7 +242,7 @@ public class GameManager : MonoBehaviour
             opponentStats.ResetForBattle();
         }
 
-        CurrentOpponent = new FighterData(opponent.Name, opponentStats, opponent.Moves);
+        CurrentOpponent = new FighterData(opponent.Name, opponentStats, opponent.Moves) { IsSmartFighter = opponent.IsSmartFighter };
         CurrentBattle = new BattleSystem(Player, CurrentOpponent);
         ChangeState(GameState.Battle);
     }
@@ -391,6 +408,74 @@ public class GameManager : MonoBehaviour
         });
     }
 
+    // ---------- Rival Showdown (Milestone 34) ----------
+    // The payoff to the Rival Ascension storyline (Milestone 33): a single
+    // fixed fight against Rival Scratch, gating the Championship Gym (see
+    // IsGymUnlocked above). Built the same way every other special fight in
+    // this game is - a fixed OpponentInfo run through the existing StartBattle
+    // pipeline. IsSmartFighter opts into BattleSystem's smarter move-choice
+    // path (Part 5) without changing any other fighter's behavior.
+
+    // Matches RivalDatabase.PortraitId exactly (not a separate "_fight" id) so
+    // the battle-stage portrait lookup (keyed off OpponentId) and the rival
+    // dialogue box's portrait lookup (keyed off PortraitId) both resolve to
+    // the same art slot if dedicated Scratch artwork is ever added.
+    public const string RivalFightOpponentId = RivalDatabase.PortraitId;
+
+    public bool HasDefeatedRival => defeatedOpponentIds.Contains(RivalFightOpponentId);
+
+    // Quick Fix (Secret Fighter): reuses the same defeatedOpponentIds HashSet
+    // as HasDefeatedRival/HasDefeatedShadowChampion - no new save field.
+    public bool HasDefeatedSecretFighter => defeatedOpponentIds.Contains(StreetFightGenerator.SecretFighterOpponentId);
+
+    public void StartRivalFight()
+    {
+        if (Player == null) return;
+
+        var rivalOpponent = new OpponentInfo
+        {
+            OpponentId = RivalFightOpponentId,
+            Name = RivalDatabase.RivalName,
+            Stats = new FighterStats
+            {
+                MaxHealth = 230,
+                CurrentHealth = 230,
+                MaxStamina = 85,
+                CurrentStamina = 85,
+                Strength = 18,
+                Defense = 17,
+                Speed = 20,
+                Striking = 23,
+                Grappling = 12,
+                Submission = 9
+            },
+            Moves = MoveDatabase.BoxingTrainerMoves,
+            RewardXP = 200,
+            RewardCoins = 100,
+            Nickname = "The Rival",
+            Quote = "Talent doesn't ask permission. Lucky for you, I brought enough for both of us.",
+            Description = "The fighter the whole league has been comparing you to since day one.",
+            Bio = "Same league, same gyms, same dream - except he's been one step ahead the whole time.",
+            LossLine = "Huh. Guess you earned it.",
+            WinLine = "Still not there. Come back when you're ready.",
+            IsSmartFighter = true
+        };
+
+        // A dedicated marker distinct from GymType.Championship - the Rival
+        // Showdown gets its own presentation tier (Part 3) in BattleScreen, not
+        // the Championship fight's aura/tint. A null Leader means EndBattle's
+        // gym-completion bookkeeping is a no-op, same as every other
+        // synthetic-gym fight (Street Fight, Shadow Champion).
+        CurrentGym = new GymInfo
+        {
+            GymId = "rival_fight",
+            GymName = "Rival Showdown",
+            GymType = GymType.Boxing
+        };
+
+        StartBattle(rivalOpponent);
+    }
+
     void TryUnlockGymMove(GymInfo gym)
     {
         if (string.IsNullOrEmpty(gym.UnlockMoveId)) return;
@@ -445,6 +530,8 @@ public class GameManager : MonoBehaviour
             case AchievementMetric.CoinsSpent: return TotalCoinsSpent;
             case AchievementMetric.MovesKnown: return Player?.KnownMoves.Count ?? 0;
             case AchievementMetric.BecameChampion: return HasBecomeChampion() ? 1 : 0;
+            case AchievementMetric.DefeatedRival: return HasDefeatedRival ? 1 : 0;
+            case AchievementMetric.DefeatedSecretFighter: return HasDefeatedSecretFighter ? 1 : 0;
             default: return 0;
         }
     }
@@ -714,6 +801,15 @@ public class GameManager : MonoBehaviour
         // If the fighter already has progress, treat the rival as already met
         // instead of showing a "rookie" greeting mid-career.
         hasSeenRivalIntro = data.HasSeenRivalIntro || TotalWins > 0 || completedGymIds.Count > 0 || hallOfChampions.Count > 0;
+
+        // Milestone 34: IsGymUnlocked now also requires HasDefeatedRival for the
+        // Championship Gym. Saves from before this milestone never fought Scratch,
+        // so without this, a player who already became champion (or already
+        // owns a Hall of Champions entry) would suddenly find the Championship
+        // Gym re-locked and lose access to the existing leader-rematch feature.
+        // Grandfather them in - they already proved themselves.
+        if (!HasDefeatedRival && (completedGymIds.Contains("championship_gym") || hallOfChampions.Count > 0))
+            defeatedOpponentIds.Add(RivalFightOpponentId);
 
         return true;
     }

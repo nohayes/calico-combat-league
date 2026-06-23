@@ -9,5 +9,7 @@ public enum AchievementMetric
     SubmissionWins,
     CoinsSpent,
     MovesKnown,
-    BecameChampion
+    BecameChampion,
+    DefeatedRival,
+    DefeatedSecretFighter
 }

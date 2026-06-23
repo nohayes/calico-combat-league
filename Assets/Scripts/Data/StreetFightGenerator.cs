@@ -1,12 +1,15 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 // Milestone 30, Part 1/2: Street Fights are optional, randomized battles for
 // grinding XP/coins between gym challenges. Opponents are generated on the
 // fly from the player's own current stats and the existing move pool - no
-// new combat system, no dedicated art (falls back to the same archetype
-// placeholder pipeline every other opponent without art already uses).
+// new combat system.
+// Milestone 35 (Fighter Sprite Association): now also assigns one of the
+// generic fighter_1..fighter_11 portraits at random, so Street Fight
+// opponents actually look like someone instead of always falling back to
+// the archetype placeholder. These ids are exclusive to Street Fights - no
+// gym trainer/leader/championship opponent ever uses this pool (Part 9).
 public static class StreetFightGenerator
 {
     static readonly string[] FirstNames =
@@ -25,9 +28,32 @@ public static class StreetFightGenerator
         ArchetypeType.Boxer, ArchetypeType.Wrestler, ArchetypeType.BjjSpecialist, ArchetypeType.MuayThaiFighter
     };
 
+    // The brief's Part 2 listed fighter_1..fighter_10; fighter_11 (and the
+    // capitalized "Fighter_7" - the one inconsistently-cased file in the set)
+    // were also found on disk and included for a bit more variety, since
+    // nothing about them is any different from the other ten.
+    static readonly string[] PortraitIds =
+    {
+        "fighter_1", "fighter_2", "fighter_3", "fighter_4", "fighter_5", "fighter_6",
+        "Fighter_7", "fighter_8", "fighter_9", "fighter_10", "fighter_11"
+    };
+
+    // Quick Fix (Secret Fighter): id doubles as both the OpponentId (so the
+    // existing portrait pipeline resolves fighter_secret.png with no extra
+    // code) and the defeat-tracking key GameManager.HasDefeatedSecretFighter
+    // reads from the existing defeatedOpponentIds set - no new save field.
+    public const string SecretFighterOpponentId = "fighter_secret";
+    const int SecretFighterChancePercent = 8;
+
     public static StreetFightOpponent Generate(GameManager gm)
     {
         var rng = new System.Random();
+
+        // Quick Fix (Secret Fighter): only rollable after the player has
+        // actually become champion, and even then only ~8% of the time -
+        // "very rare," not a guaranteed unlock.
+        if (gm != null && gm.HasBecomeChampion() && rng.Next(0, 100) < SecretFighterChancePercent)
+            return GenerateSecretFighter(gm, rng);
 
         var difficulty = RollDifficulty(gm?.TotalGymsCleared ?? 0, rng);
         string name = $"{FirstNames[rng.Next(FirstNames.Length)]} {LastNames[rng.Next(LastNames.Length)]}";
@@ -58,9 +84,18 @@ public static class StreetFightGenerator
         int rewardXP = Mathf.RoundToInt(rng.Next(minXP, maxXP + 1) * levelFactor);
         int rewardCoins = Mathf.RoundToInt(rng.Next(minCoins, maxCoins + 1) * levelFactor);
 
+        // Milestone 35: the portrait id IS the OpponentId now (rather than a
+        // GUID with a separate portrait lookup) so the existing generic
+        // SetFighterPortrait/SetFighterBattleSprite pipeline - already keyed
+        // off OpponentId everywhere it's called - resolves the art with no
+        // further changes. Reusing the same id across different Street Fights
+        // is explicitly fine per the brief; nothing tracks Street Fight
+        // opponents individually beyond the lifetime win/loss counters.
+        string portraitId = PortraitIds[rng.Next(PortraitIds.Length)];
+
         var opponent = new OpponentInfo
         {
-            OpponentId = $"street_fight_{Guid.NewGuid():N}",
+            OpponentId = portraitId,
             Name = name,
             Stats = stats,
             Moves = PickMoves(rng),
@@ -78,6 +113,68 @@ public static class StreetFightGenerator
         {
             Opponent = opponent,
             Difficulty = difficulty,
+            PortraitArchetype = PortraitArchetypes[rng.Next(PortraitArchetypes.Length)]
+        };
+    }
+
+    // Quick Fix (Secret Fighter): reuses the exact same FighterStats/move-pool
+    // machinery as a normal Street Fighter - just a different stat band (a
+    // notch above the existing Dangerous tier) and a bonus reward range, plus
+    // mysterious flavor text instead of a randomized name. No new combat
+    // system, no new battle path - it's still just an OpponentInfo run through
+    // GameManager.StartStreetFight like any other Street Fight roll.
+    static StreetFightOpponent GenerateSecretFighter(GameManager gm, System.Random rng)
+    {
+        var playerStats = gm?.Player?.Stats;
+        int baseLevel = Mathf.Max(1, playerStats?.Level ?? 1);
+        float statScale = Mathf.Lerp(1.5f, 1.8f, (float)rng.NextDouble());
+
+        int Scale(int baseValue) => Mathf.Max(1, Mathf.RoundToInt(baseValue * statScale));
+
+        var stats = new FighterStats
+        {
+            Level = baseLevel,
+            MaxHealth = Scale(playerStats?.MaxHealth ?? 100),
+            MaxStamina = Scale(playerStats?.MaxStamina ?? 50),
+            Strength = Scale(playerStats?.Strength ?? 10),
+            Defense = Scale(playerStats?.Defense ?? 8),
+            Speed = Scale(playerStats?.Speed ?? 10),
+            Striking = Scale(playerStats?.Striking ?? 12),
+            Grappling = Scale(playerStats?.Grappling ?? 10),
+            Submission = Scale(playerStats?.Submission ?? 8)
+        };
+        stats.CurrentHealth = stats.MaxHealth;
+        stats.CurrentStamina = stats.MaxStamina;
+
+        // Bonus rewards (Part: "If victorious: Grant bonus rewards") - notably
+        // above the normal Dangerous-tier range (90-120 XP / 45-65 Coins).
+        // A loss still grants nothing, same as every other fight (GameManager
+        // already zeroes LastRewardXP/Coins on defeat) - "use normal Street
+        // Fight rewards" there just means "no special-casing needed."
+        float levelFactor = 1f + (baseLevel - 1) * 0.12f;
+        int rewardXP = Mathf.RoundToInt(rng.Next(150, 201) * levelFactor);
+        int rewardCoins = Mathf.RoundToInt(rng.Next(80, 111) * levelFactor);
+
+        var opponent = new OpponentInfo
+        {
+            OpponentId = SecretFighterOpponentId,
+            Name = "The Stranger",
+            Stats = stats,
+            Moves = PickMoves(rng),
+            RewardXP = rewardXP,
+            RewardCoins = rewardCoins,
+            Nickname = "????",
+            Description = "An opponent nobody seems to know anything about.",
+            Bio = "No one knows where this fighter came from. They only show up for those who've already proven everything else.",
+            LossLine = "...Interesting.",
+            WinLine = "Not yet.",
+            Quote = "You've already beaten everyone else. Let's see how far you've really come."
+        };
+
+        return new StreetFightOpponent
+        {
+            Opponent = opponent,
+            Difficulty = StreetFightDifficulty.Dangerous,
             PortraitArchetype = PortraitArchetypes[rng.Next(PortraitArchetypes.Length)]
         };
     }

@@ -20,7 +20,7 @@ public class GymScreen : UIScreen
         fighterRow = UIFactory.CreateContainer(Root.transform, new Vector2(0.04f, 0.18f), new Vector2(0.96f, 0.84f));
 
         UIFactory.CreateButton(Root.transform, "BACK TO MAP", new Vector2(0.35f, 0.03f), new Vector2(0.65f, 0.14f),
-            () => GM.ChangeState(GameState.GymSelection), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.GymSelection), UIFactory.SecondaryColor, isBackAction: true);
     }
 
     public void Refresh()

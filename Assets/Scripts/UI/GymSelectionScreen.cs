@@ -52,7 +52,7 @@ public class GymSelectionScreen : UIScreen
         avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
 
         UIFactory.CreateButton(Root.transform, "BACK TO HOME", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
-            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
 
         rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
     }
@@ -190,18 +190,36 @@ public class GymSelectionScreen : UIScreen
 
     void BuildGymRow(GymInfo gym, int index, int totalGyms)
     {
+        // Milestone 34, Part 1: in the gap between "BJJ cleared" and "rival
+        // defeated," the Championship row becomes the Rival Showdown instead
+        // of a locked gym - same row, same travel rail, different destination.
+        bool rivalFightReady = GM.IsRivalFightReady(gym);
         bool unlocked = GM.IsGymUnlocked(gym);
         bool completed = GM.IsGymCompleted(gym);
-        string tagline = completed ? "Cleared" : (unlocked && !string.IsNullOrEmpty(gym.Motto) ? gym.Motto : (unlocked ? "Available" : "Locked"));
-        string label = $"{gym.GymName}\n{tagline}";
+
+        string label;
+        Color color;
+        if (rivalFightReady)
+        {
+            label = "RIVAL SHOWDOWN\nScratch is waiting.";
+            color = RivalDatabase.AccentColor;
+        }
+        else
+        {
+            string tagline = completed ? "Cleared" : (unlocked && !string.IsNullOrEmpty(gym.Motto) ? gym.Motto : (unlocked ? "Available" : "Locked"));
+            label = $"{gym.GymName}\n{tagline}";
+            color = completed ? UIFactory.PositiveColor : (unlocked ? IconFactory.GetGymThemeColor(gym.GymType) : UIFactory.LockedColor);
+        }
 
         GetRowAnchors(index, totalGyms, out float yMin, out float yMax);
 
-        Color color = completed ? UIFactory.PositiveColor : (unlocked ? IconFactory.GetGymThemeColor(gym.GymType) : UIFactory.LockedColor);
         var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.06f, yMin), new Vector2(0.94f, yMax),
-            () => TravelToGym(gym, index, totalGyms), color);
-        button.interactable = unlocked;
+            () => { if (rivalFightReady) TravelToRivalFight(index, totalGyms); else TravelToGym(gym, index, totalGyms); }, color);
+        button.interactable = unlocked || rivalFightReady;
         dynamicEntries.Add(button.gameObject);
+
+        if (rivalFightReady && seenUnlockedGymIds.Add(gym.GymId + "_rival_ready"))
+            PlayPulse((RectTransform)button.transform, 1.1f, 0.6f);
 
         if (unlocked && seenUnlockedGymIds.Add(gym.GymId))
         {
@@ -226,9 +244,17 @@ public class GymSelectionScreen : UIScreen
         iconRt.offsetMin = Vector2.zero;
         iconRt.offsetMax = Vector2.zero;
         var iconImage = iconGo.GetComponent<Image>();
-        var realIcon = ArtRegistry.GetGymIcon(gym.GymId);
-        iconImage.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
-        iconImage.color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+        if (rivalFightReady)
+        {
+            iconImage.sprite = IconFactory.GetShapeSprite(IconShape.Star);
+            iconImage.color = RivalDatabase.AccentColor;
+        }
+        else
+        {
+            var realIcon = ArtRegistry.GetGymIcon(gym.GymId);
+            iconImage.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
+            iconImage.color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+        }
     }
 
     void TravelToGym(GymInfo gym, int index, int totalGyms)
@@ -245,6 +271,26 @@ public class GymSelectionScreen : UIScreen
             traveling = false;
             avatarGymIndex = index;
             GM.EnterGym(gym);
+        });
+    }
+
+    // Milestone 34, Part 1/2: travels to the Championship row's position, then
+    // plays the showdown intro encounter, then starts the fight directly when
+    // the player taps through the last line - RivalDialogueBox's own
+    // onComplete callback, no extra coroutine needed.
+    void TravelToRivalFight(int index, int totalGyms)
+    {
+        if (traveling) return;
+        traveling = true;
+
+        GetRowAnchors(index, totalGyms, out float yMin, out float yMax);
+        Vector2 targetMin = new Vector2(RailXMin, RootYFromListY(yMin));
+        Vector2 targetMax = new Vector2(RailXMax, RootYFromListY(yMax));
+
+        avatarVisual.MoveToAnchor(targetMin, targetMax, TravelDuration, () =>
+        {
+            traveling = false;
+            rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.ShowdownIntroLines, () => GM.StartRivalFight());
         });
     }
 

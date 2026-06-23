@@ -8,6 +8,12 @@ public class FighterData
     public List<MoveData> EquippedMoves;
     public ArchetypeType Archetype = ArchetypeType.Unspecified;
 
+    // Milestone 34, Part 5: opt-in flag for BattleSystem's smarter move-choice
+    // path. Defaults to false for every existing fighter (player, gym trainers/
+    // leaders, Street Fight opponents, Shadow Champion) - their behavior is
+    // completely unchanged. Only Rival Scratch sets this to true.
+    public bool IsSmartFighter;
+
     public FighterData(string name, FighterStats stats, List<MoveData> knownMoves, List<MoveData> equippedMoves = null)
     {
         Name = name;

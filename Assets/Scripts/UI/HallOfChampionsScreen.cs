@@ -20,7 +20,7 @@ public class HallOfChampionsScreen : UIScreen
         emptyText.gameObject.SetActive(false);
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.05f, 0.03f), new Vector2(0.46f, 0.12f),
-            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
         UIFactory.CreateButton(Root.transform, "ACHIEVEMENTS", new Vector2(0.54f, 0.03f), new Vector2(0.95f, 0.12f),
             () => GM.ChangeState(GameState.AchievementsScreen), UIFactory.SecondaryColor);
     }

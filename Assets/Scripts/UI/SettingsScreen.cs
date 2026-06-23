@@ -31,7 +31,7 @@ public class SettingsScreen : UIScreen
             new Vector2(0.1f, 0.1f), new Vector2(0.9f, 0.155f), TextAnchor.MiddleCenter);
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.02f), new Vector2(0.7f, 0.09f),
-            () => GM.ChangeState(GameState.MainMenu), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.MainMenu), UIFactory.SecondaryColor, isBackAction: true);
     }
 
     Text CreateVolumeRow(string label, float yMin, UnityEngine.Events.UnityAction decrease,

@@ -37,6 +37,9 @@ public class BattleSystem
     // Reused across AI turns to avoid allocating a fresh list every move choice.
     readonly List<MoveData> affordableMovesBuffer = new List<MoveData>();
 
+    // Milestone 34, Part 5/6: reused by ChooseSmartEnemyMove's combo lookahead.
+    readonly List<string> probeMoveIdsBuffer = new List<string>();
+
     // Milestone 31, Part 1: trailing window of each fighter's own recent move
     // ids, used to detect combos. The AI's move selection (ChooseEnemyMove)
     // stays completely untouched - it has no idea combos exist - but if it
@@ -405,6 +408,11 @@ public class BattleSystem
         }
         if (affordableMovesBuffer.Count == 0) return null;
 
+        // Milestone 34, Part 5/6: an opt-in smarter policy for specific
+        // opponents (Rival Scratch) only - every other fighter keeps the
+        // exact chance-based behavior below, completely unchanged.
+        if (enemy.IsSmartFighter) return ChooseSmartEnemyMove(cheapest);
+
         // Occasionally conserve stamina even when a stronger move is affordable.
         if (rng.Next(0, 100) < AiConserveStaminaChancePercent) return cheapest;
 
@@ -415,6 +423,41 @@ public class BattleSystem
         affordableMovesBuffer.Sort((a, b) => b.Power.CompareTo(a.Power));
         int topCount = Mathf.Max(1, Mathf.CeilToInt(affordableMovesBuffer.Count * AiTopMovePoolFraction));
         return affordableMovesBuffer[rng.Next(topCount)];
+    }
+
+    // Milestone 34, Part 5/6: reuses affordableMovesBuffer (already built by the
+    // caller) and the same recentOpponentMoveIds/ComboDatabase the incidental-AI-
+    // combo support from Milestone 31 already added - no new tracking, no new
+    // combat math, just a better decision over the same affordable-moves list.
+    MoveData ChooseSmartEnemyMove(MoveData cheapest)
+    {
+        // Prioritize finishing a combo (Part 6) - if any affordable move would
+        // complete a known sequence, take it immediately for the bonus.
+        for (int i = 0; i < affordableMovesBuffer.Count; i++)
+        {
+            var candidate = affordableMovesBuffer[i];
+            probeMoveIdsBuffer.Clear();
+            probeMoveIdsBuffer.AddRange(recentOpponentMoveIds);
+            probeMoveIdsBuffer.Add(candidate.Id);
+            if (ComboDatabase.TryMatch(probeMoveIdsBuffer) != null) return candidate;
+        }
+
+        // Never waste a heavy move at low stamina (Part 5) - deterministic,
+        // not just "sometimes" like the generic AI's chance roll.
+        float staminaRatio = (float)Opponent.Stats.CurrentStamina / Opponent.Stats.MaxStamina;
+        if (staminaRatio < AiLowStaminaRatioThreshold) return cheapest;
+
+        // Efficient stamina usage (Part 5): best power-per-stamina among what's
+        // affordable, instead of a random pick from the top half by raw power.
+        MoveData best = affordableMovesBuffer[0];
+        float bestRatio = best.Power / (float)Mathf.Max(1, best.StaminaCost);
+        for (int i = 1; i < affordableMovesBuffer.Count; i++)
+        {
+            var m = affordableMovesBuffer[i];
+            float ratio = m.Power / (float)Mathf.Max(1, m.StaminaCost);
+            if (ratio > bestRatio) { best = m; bestRatio = ratio; }
+        }
+        return best;
     }
 
     void RecoverStamina(FighterData fighter, List<string> log)

@@ -116,7 +116,7 @@ public static class UIFactory
     // ---------- Buttons ----------
 
     public static Button CreateButton(Transform parent, string label, Vector2 anchorMin, Vector2 anchorMax,
-        UnityEngine.Events.UnityAction onClick, Color? color = null)
+        UnityEngine.Events.UnityAction onClick, Color? color = null, bool isBackAction = false)
     {
         var go = new GameObject(SanitizeName("Button_" + label), typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
@@ -146,7 +146,11 @@ public static class UIFactory
 
         btn.onClick.AddListener(() =>
         {
-            AudioManager.Instance?.PlayClick();
+            // Milestone 35, Part 2: isBackAction defaults to false, so every
+            // existing call site keeps playing the regular click sound unchanged -
+            // only the explicit BACK-style buttons below opt into button_back.
+            if (isBackAction) AudioManager.Instance?.PlayBack();
+            else AudioManager.Instance?.PlayClick();
             onClick?.Invoke();
         });
 

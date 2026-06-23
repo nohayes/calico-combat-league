@@ -21,8 +21,43 @@ public static class ArtRegistry
 {
     static readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>();
 
-    public static Sprite GetFighterPortrait(string fighterId) =>
-        Load(string.IsNullOrEmpty(fighterId) ? null : $"Art/Fighters/{fighterId}");
+    public static Sprite GetFighterPortrait(string fighterId)
+    {
+        if (string.IsNullOrEmpty(fighterId)) return null;
+        return Load(GetFighterArtOverride(fighterId) ?? $"Art/Fighters/{fighterId}");
+    }
+
+    // Milestone 35: Wrestling, BJJ, and Championship art arrived under filenames
+    // that don't match those gyms' OpponentIds (e.g. wrestler_leader_1.png for
+    // "wrestling_trainer_1", brazillian_jj_champ.png for "bjj_leader" - no
+    // "_leader" in that one). Boxing/Muay Thai art already matches its
+    // OpponentId exactly and needs no entry here. Same Load() pipeline either
+    // way - this is a path override, not a second art system.
+    static string GetFighterArtOverride(string fighterId)
+    {
+        switch (fighterId)
+        {
+            case "wrestling_trainer_1": return "Art/Fighters/wrestler_leader_1";
+            case "wrestling_trainer_2": return "Art/Fighters/wrestler_leader_2";
+            case "wrestling_trainer_3": return "Art/Fighters/wrestler_leader_3";
+            case "wrestling_leader": return "Art/Fighters/wrestler_leader_champ";
+            case "bjj_trainer_1": return "Art/Fighters/brazillian_jj_leader_1";
+            case "bjj_trainer_2": return "Art/Fighters/brazillian_jj_leader_2";
+            case "bjj_trainer_3": return "Art/Fighters/brazillian_jj_leader_3";
+            case "bjj_leader": return "Art/Fighters/brazillian_jj_champ";
+            // Championship progression order: trainer_1/2/3 then the leader.
+            case "championship_trainer_1": return "Art/Fighters/fighter_champ_sean";
+            case "championship_trainer_2": return "Art/Fighters/fighter_champ_islam";
+            case "championship_trainer_3": return "Art/Fighters/fighter_champ_connor";
+            case "championship_leader": return "Art/Fighters/fighter_champ_poatan";
+            // Quick Fix: Rival Scratch's dedicated art - RivalDatabase.PortraitId
+            // ("rival_scratch") is also GameManager.RivalFightOpponentId, so this
+            // single override covers the dialogue box portrait, the Fight Night
+            // intro, and the battle-stage sprite all at once.
+            case RivalDatabase.PortraitId: return "Art/Fighters/fighter_rival";
+            default: return null;
+        }
+    }
 
     public static Sprite GetArchetypePortrait(ArchetypeType archetype) =>
         archetype == ArchetypeType.Unspecified ? null : Load($"Art/Fighters/archetype_{archetype}");

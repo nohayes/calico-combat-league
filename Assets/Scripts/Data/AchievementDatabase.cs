@@ -40,10 +40,26 @@ public static class AchievementDatabase
         },
         new AchievementData
         {
+            Id = "rival_defeated",
+            Name = "Talent Doesn't Ask Permission",
+            Description = "Defeat Rival Scratch and earn your shot at the Championship.",
+            Metric = AchievementMetric.DefeatedRival,
+            TargetValue = 1
+        },
+        new AchievementData
+        {
             Id = "champion",
             Name = "Champion",
             Description = "Defeat the final gym and become champion.",
             Metric = AchievementMetric.BecameChampion,
+            TargetValue = 1
+        },
+        new AchievementData
+        {
+            Id = "secret_fighter_defeated",
+            Name = "The Stranger",
+            Description = "Defeat the mysterious Street Fight opponent who only appears after you become champion.",
+            Metric = AchievementMetric.DefeatedSecretFighter,
             TargetValue = 1
         },
         new AchievementData

@@ -22,4 +22,8 @@ public class OpponentInfo
     public string Bio;
     public string LossLine;
     public string WinLine;
+
+    // Milestone 34, Part 5: opt-in flag forwarded onto the FighterData
+    // BattleSystem actually reads. False for every opponent except Rival Scratch.
+    public bool IsSmartFighter;
 }

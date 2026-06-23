@@ -373,10 +373,19 @@ public class BattleScreen : UIScreen
 
         bool championshipFight = IsChampionshipFight();
         bool leaderFight = IsLeaderFight();
-        stageCard.GetComponent<Image>().color = championshipFight
-            ? new Color(0.16f, 0.12f, 0.04f, 0.94f)
-            : new Color(0.08f, 0.07f, 0.07f, 0.88f);
-        opponentAura.gameObject.SetActive(championshipFight || leaderFight);
+        bool rivalFight = IsRivalFight();
+        // Milestone 34, Part 3: the Rival Showdown gets its own violet tint -
+        // Scratch's accent color - distinct from the Championship fight's gold/
+        // amber and a plain trainer fight's neutral dark stage.
+        stageCard.GetComponent<Image>().color = rivalFight
+            ? new Color(0.14f, 0.09f, 0.18f, 0.94f)
+            : championshipFight
+                ? new Color(0.16f, 0.12f, 0.04f, 0.94f)
+                : new Color(0.08f, 0.07f, 0.07f, 0.88f);
+        opponentAura.gameObject.SetActive(championshipFight || leaderFight || rivalFight);
+        opponentAura.color = rivalFight
+            ? new Color(RivalDatabase.AccentColor.r, RivalDatabase.AccentColor.g, RivalDatabase.AccentColor.b, 0.26f)
+            : new Color(UIFactory.GoldColor.r, UIFactory.GoldColor.g, UIFactory.GoldColor.b, 0.22f);
         playerCombatantRoot.anchorMin = championshipFight ? new Vector2(0.01f, 0.01f) : new Vector2(0.04f, 0.03f);
         playerCombatantRoot.anchorMax = championshipFight ? new Vector2(0.49f, 1f) : new Vector2(0.48f, 0.98f);
         opponentCombatantRoot.anchorMin = championshipFight ? new Vector2(0.51f, 0.01f) : new Vector2(0.52f, 0.03f);
@@ -409,9 +418,11 @@ public class BattleScreen : UIScreen
         recoverButton.interactable = false;
 
         introCard.SetAsLastSibling();
-        introCard.GetComponent<Image>().color = championshipFight
-            ? new Color(0.2f, 0.15f, 0.05f, 0.98f)
-            : new Color(0.08f, 0.07f, 0.07f, 0.98f);
+        introCard.GetComponent<Image>().color = rivalFight
+            ? new Color(0.16f, 0.1f, 0.2f, 0.98f)
+            : championshipFight
+                ? new Color(0.2f, 0.15f, 0.05f, 0.98f)
+                : new Color(0.08f, 0.07f, 0.07f, 0.98f);
         RunAnimation(FightIntroRoutine());
     }
 
@@ -432,7 +443,7 @@ public class BattleScreen : UIScreen
         bool rematch = leaderFight && GM.HasBecomeChampion();
 
         introBillingText.text = GetFightBilling();
-        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight());
+        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight(), IsRivalFight());
         introText.text = "";
         introMatchupGroup.gameObject.SetActive(true);
         introTapeGroup.gameObject.SetActive(false);
@@ -487,10 +498,14 @@ public class BattleScreen : UIScreen
         }
         introText.fontSize = UIFactory.SubheadingSize;
 
-        introText.text = championship ? "CHAMPIONSHIP BOUT" : leaderFight ? "LEADER CHALLENGE" : IsStreetFight() ? "STREET FIGHT" : "READY";
-        introText.color = UIFactory.GoldColor;
-        PlayPulse(introText.rectTransform, championship ? 1.18f : leaderFight ? 1.12f : 1.08f, 0.3f);
-        yield return WaitSkippable(championship ? 0.55f : leaderFight ? 0.4f : 0.28f);
+        bool rivalFightHype = IsRivalFight();
+        introText.text = championship ? "CHAMPIONSHIP BOUT" : rivalFightHype ? "RIVAL SHOWDOWN" : leaderFight ? "LEADER CHALLENGE" : IsStreetFight() ? "STREET FIGHT" : "READY";
+        // Milestone 34, Part 3: the rival fight's hype beat uses Scratch's own
+        // accent color instead of the usual gold, so this moment reads as
+        // distinct even at a glance.
+        introText.color = rivalFightHype ? RivalDatabase.AccentColor : UIFactory.GoldColor;
+        PlayPulse(introText.rectTransform, championship ? 1.18f : rivalFightHype ? 1.16f : leaderFight ? 1.12f : 1.08f, 0.3f);
+        yield return WaitSkippable(championship ? 0.55f : rivalFightHype ? 0.45f : leaderFight ? 0.4f : 0.28f);
 
         introText.text = "FIGHT!";
         introText.color = UIFactory.CreamColor;
@@ -626,6 +641,12 @@ public class BattleScreen : UIScreen
     // relies on for "this fight shouldn't touch gym progression."
     bool IsStreetFight() => GM.CurrentGym?.GymId == "street_fight";
 
+    // Milestone 34, Part 3: matches the synthetic GymInfo GameManager.StartRivalFight
+    // creates (GymId "rival_fight", GymType.Boxing, no Leader) - deliberately
+    // NOT GymType.Championship, so this fight gets its own presentation tier
+    // instead of inheriting the Championship fight's aura/tint.
+    bool IsRivalFight() => GM.CurrentGym?.GymId == "rival_fight";
+
     string GetFightBilling()
     {
         var gym = GM.CurrentGym;
@@ -634,6 +655,8 @@ public class BattleScreen : UIScreen
 
         if (gym != null && gym.GymType == GymType.Championship && isLeader)
             return "CHAMPIONSHIP BOUT";
+        if (IsRivalFight())
+            return "RIVAL SHOWDOWN";
         if (IsStreetFight())
             return "STREET FIGHT";
         if (isLeader)
@@ -641,9 +664,10 @@ public class BattleScreen : UIScreen
         return gym != null ? $"{gym.GymName.ToUpper()} SHOWDOWN" : "TONIGHT'S FEATURED MATCHUP";
     }
 
-    static string GetFightAnnouncement(bool championship, bool leaderFight, bool rematch, bool streetFight)
+    static string GetFightAnnouncement(bool championship, bool leaderFight, bool rematch, bool streetFight, bool rivalFight)
     {
         if (championship) return "Championship fight!";
+        if (rivalFight) return "The fight you've been waiting for.";
         if (streetFight) return "Random opponent. Anything can happen.";
         if (leaderFight) return rematch ? "Contender matchup!" : "Gym leader challenge!";
         return "Tonight's featured bout!";
@@ -903,12 +927,12 @@ public class BattleScreen : UIScreen
                 yield return new WaitForSecondsRealtime(move != null && IsGrapplingMove(move.Type) ? 0.12f : 0.075f);
 
                 if (critical) PlayTimeImpact(0.28f, 0.12f);
-                ProcessSingleLine(line);
+                ProcessSingleLine(line, move);
                 yield return new WaitForSecondsRealtime(critical ? 0.3f : 0.16f);
             }
             else
             {
-                ProcessSingleLine(line);
+                ProcessSingleLine(line, null);
                 if (IsStatusFeedbackLine(line)) yield return new WaitForSecondsRealtime(0.08f);
             }
         }
@@ -986,7 +1010,10 @@ public class BattleScreen : UIScreen
             line.Contains("lands a COMBO!") || line.Contains("catches their breath");
     }
 
-    void ProcessSingleLine(string line)
+    // Milestone 35, Part 3: move is optional - only the attack-resolution path
+    // in PlayTurnFeedback has one resolved; everything else (status lines,
+    // item-use lines) passes null and falls back to the generic hit sound.
+    void ProcessSingleLine(string line, MoveData move = null)
     {
         bool namedIsPlayer = line.StartsWith(GM.Player.Name);
         bool namedIsOpponent = !namedIsPlayer && GM.CurrentOpponent != null && line.StartsWith(GM.CurrentOpponent.Name);
@@ -995,9 +1022,13 @@ public class BattleScreen : UIScreen
         // Milestone 31, Part 4/8: routed by the same name-prefix check as every
         // other line, so the "COMBO!" popup lands on whichever side actually
         // triggered it - the player, or (per Part 8) the AI landing one by chance.
+        // Milestone 35, Part 4: combo_trigger.mp3 instead of the old crit-sound
+        // placeholder - this line is only ever emitted once per activation
+        // (BattleSystem.ResolveMove adds it exactly once inside its combo
+        // branch), so the sound can't double-fire for the same combo.
         if (line.Contains("lands a COMBO!"))
         {
-            AudioManager.Instance?.PlayCriticalHit();
+            AudioManager.Instance?.PlayComboTrigger();
             var fx = namedIsPlayer ? playerFx : opponentFx;
             fx.SpawnPopup("COMBO!", CritColor, true);
         }
@@ -1008,7 +1039,10 @@ public class BattleScreen : UIScreen
         }
         else if (line.Contains(" hits ") && line.Contains("damage."))
         {
-            AudioManager.Instance?.PlayHit();
+            // Milestone 35, Part 3: move-type-specific strike sound instead of
+            // one generic hit clip - falls back to PlayHit if move is null
+            // (status-damage lines, items) or its type isn't explicitly mapped.
+            PlayStrikeSound(move);
             ShowHitFeedback(onOpponentSide: namedIsPlayer, ExtractNumber(line), crit: false);
         }
         else if (line.Contains("but misses!"))
@@ -1033,6 +1067,49 @@ public class BattleScreen : UIScreen
         var fx = isPlayer ? playerFx : opponentFx;
         fx.SpawnPopup($"+{amount} STM", StaminaColor, false);
         fx.Flash(new Color(StaminaColor.r, StaminaColor.g, StaminaColor.b, 0.5f));
+    }
+
+    // Milestone 35, Part 3: maps each existing move to the audio brief's
+    // strike categories by id - explicit rather than inferred from MoveType,
+    // since the brief calls out specific move names (e.g. Hook is "heavy"
+    // despite being MoveType.Boxing same as the "light" Jab/Cross). Any move
+    // not listed (including future ones) safely falls back to the generic hit.
+    static void PlayStrikeSound(MoveData move)
+    {
+        if (move == null) { AudioManager.Instance?.PlayHit(); return; }
+
+        switch (move.Id)
+        {
+            case "jab":
+            case "cross":
+            case "leg_kick":
+            case "push_kick":
+            case "body_shot":
+                AudioManager.Instance?.PlayLightStrike();
+                break;
+            case "hook":
+            case "elbow_strike":
+            case "elbow_barrage":
+            case "knee_strike":
+            case "ground_smash":
+            case "spinning_back_kick":
+                AudioManager.Instance?.PlayHeavyStrike();
+                break;
+            case "double_leg_takedown":
+            case "body_lock":
+            case "suplex":
+                AudioManager.Instance?.PlayTakedown();
+                break;
+            case "kimura":
+            case "armbar":
+            case "triangle_choke":
+            case "rear_naked_choke":
+                AudioManager.Instance?.PlaySubmissionMove();
+                break;
+            default:
+                AudioManager.Instance?.PlayHit();
+                break;
+        }
     }
 
     void ShowHitFeedback(bool onOpponentSide, int damage, bool crit, bool isStatusDamage = false)

@@ -37,9 +37,13 @@ public class RivalDialogueBox : MonoBehaviour
         if (lines == null || lines.Count == 0) return;
         StopAllCoroutines();
 
-        // Milestone 33, Part 9: "rival intro sound if available" - reuses the
-        // existing crit stinger rather than adding a new audio asset.
-        AudioManager.Instance?.PlayCriticalHit();
+        // Milestone 33, Part 9 wanted "a rival intro sound if available" and
+        // reused the crit stinger as a placeholder since no dedicated asset
+        // existed yet. Milestone 35, Part 7: rival_encounter.mp3 now exists -
+        // every rival dialogue box appearance (first appearance, gym-checkpoint
+        // encounters, intercepts, the showdown intro) routes through this one
+        // Show() method, so this single change covers all of them.
+        AudioManager.Instance?.PlayRivalEncounter();
 
         this.onComplete = onComplete;
         pendingLines = new List<string>(lines);

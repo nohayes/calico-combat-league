@@ -50,7 +50,7 @@ public class ProfileScreen : UIScreen
         UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.51f, 0.03f), new Vector2(0.73f, 0.13f),
             () => GM.ChangeState(GameState.HallOfChampionsScreen), UIFactory.SecondaryColor);
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.75f, 0.03f), new Vector2(0.97f, 0.13f),
-            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
     }
 
     public void Refresh()

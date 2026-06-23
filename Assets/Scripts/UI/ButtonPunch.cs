@@ -34,6 +34,11 @@ public class ButtonPunch : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
         pointerOver = true;
         AnimateTo(HoverScale);
+        // Milestone 35, Part 2: every button, selectable fighter portrait, and
+        // gym entry already has ButtonPunch attached (UIFactory.CreateButton /
+        // GymScreen's fighter slots) - hooking the hover sound here covers all
+        // three with one change instead of touching every call site.
+        AudioManager.Instance?.PlayHover();
     }
 
     public void OnPointerExit(PointerEventData eventData)

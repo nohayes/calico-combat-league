@@ -30,9 +30,24 @@ public class AudioManager : MonoBehaviour
     AudioClip hitClip;
     AudioClip criticalHitClip;
     AudioClip victoryClip;
-    AudioClip defeatClip;
     AudioClip gymClearedClip;
     AudioClip championVictoryClip;
+
+    // Milestone 35: audio integration pass - new clips for events that
+    // previously had no dedicated sound (or silently no-op'd because the
+    // clip they looked for never existed).
+    AudioClip hoverClip;
+    AudioClip backClip;
+    AudioClip lightStrikeClip;
+    AudioClip heavyStrikeClip;
+    AudioClip takedownClip;
+    AudioClip submissionClip;
+    AudioClip comboTriggerClip;
+    AudioClip levelUpClip;
+    AudioClip defeatClip1;
+    AudioClip defeatClip2;
+    AudioClip rivalEncounterClip;
+    AudioClip rivalVictoryClip;
 
     public float MasterVolume { get; private set; }
     public float MusicVolume { get; private set; }
@@ -59,14 +74,33 @@ public class AudioManager : MonoBehaviour
         sfxSource.playOnAwake = false;
         sfxSource.volume = SfxOutputVolume;
 
-        // Preserve all pre-Milestone-14 SFX locations.
-        clickClip = LoadClip("Audio/click");
+        // Preserve all pre-Milestone-14 SFX locations, preferring the newer
+        // Milestone 35 filenames where one now actually exists.
+        clickClip = LoadFirst("Audio/button_click", "Audio/click");
         hitClip = LoadClip("Audio/hit");
         criticalHitClip = LoadClip("Audio/critical_hit");
         victoryClip = LoadClip("Audio/victory");
-        defeatClip = LoadClip("Audio/defeat");
         gymClearedClip = LoadClip("Audio/gym_cleared");
-        championVictoryClip = LoadClip("Audio/champion_victory");
+        // "champion_victory.mp3" never existed; the actual file added this
+        // milestone is "Championship.mp3" (capitalized) - try a few casings
+        // since asset lookups can be case-sensitive on some platforms.
+        championVictoryClip = LoadFirst("Audio/Championship", "Audio/championship", "Audio/champion_victory");
+
+        // Milestone 35: audit found two new asset filenames that don't match
+        // the brief's own wording ("light_strike"/"heavy_strike") - the actual
+        // files are "light_punch"/"heavy_punch". Wiring to what's really there.
+        hoverClip = LoadClip("Audio/button_hover");
+        backClip = LoadClip("Audio/button_back");
+        lightStrikeClip = LoadClip("Audio/light_punch");
+        heavyStrikeClip = LoadClip("Audio/heavy_punch");
+        takedownClip = LoadClip("Audio/takedown");
+        submissionClip = LoadClip("Audio/submission");
+        comboTriggerClip = LoadClip("Audio/combo_trigger");
+        levelUpClip = LoadClip("Audio/level_up");
+        defeatClip1 = LoadClip("Audio/defeat1");
+        defeatClip2 = LoadClip("Audio/defeat2");
+        rivalEncounterClip = LoadClip("Audio/rival_encounter");
+        rivalVictoryClip = LoadClip("Audio/rival_victory");
     }
 
     AudioSource CreateMusicSource()
@@ -253,18 +287,58 @@ public class AudioManager : MonoBehaviour
         }
     }
 
-    public void PlayClick() => PlaySfx(clickClip);
-    public void PlayHit() => PlaySfx(hitClip);
-    public void PlayCriticalHit() => PlaySfx(criticalHitClip != null ? criticalHitClip : hitClip);
-    public void PlayVictory() => PlaySfx(victoryClip);
-    public void PlayDefeat() => PlaySfx(defeatClip);
-    public void PlayGymCleared() => PlaySfx(gymClearedClip != null ? gymClearedClip : victoryClip);
-    public void PlayChampionVictory() => PlaySfx(championVictoryClip != null ? championVictoryClip : victoryClip);
+    // Milestone 35, Part 8: volume scales are relative to the single shared
+    // sfxSource.volume (SfxOutputVolume) - UI quiet, combat medium, critical/
+    // combo a bit louder, results most prominent. All through the one existing
+    // AudioSource.PlayOneShot(clip, volumeScale) overload - no second mixer,
+    // no new AudioSource.
+    const float UiVolume = 0.55f;
+    const float CombatVolume = 0.9f;
+    const float EmphasisVolume = 1.15f;
+    const float ResultVolume = 1.3f;
 
-    void PlaySfx(AudioClip clip)
+    public void PlayClick() => PlaySfx(clickClip, UiVolume + 0.1f);
+    public void PlayHover() => PlaySfx(hoverClip, UiVolume);
+    public void PlayBack() => PlaySfx(backClip != null ? backClip : clickClip, UiVolume + 0.1f);
+    public void PlayHit() => PlaySfx(hitClip, CombatVolume);
+    public void PlayCriticalHit() => PlaySfx(criticalHitClip != null ? criticalHitClip : hitClip, EmphasisVolume);
+    public void PlayVictory() => PlaySfx(victoryClip, ResultVolume - 0.1f);
+    public void PlayDefeat() => PlaySfx(PickDefeatClip(), CombatVolume + 0.1f);
+    public void PlayGymCleared() => PlaySfx(gymClearedClip != null ? gymClearedClip : victoryClip, ResultVolume);
+    public void PlayChampionVictory() => PlaySfx(championVictoryClip != null ? championVictoryClip : victoryClip, ResultVolume + 0.05f);
+
+    // Part 3: move-type strike sounds.
+    public void PlayLightStrike() => PlaySfx(lightStrikeClip != null ? lightStrikeClip : hitClip, CombatVolume);
+    public void PlayHeavyStrike() => PlaySfx(heavyStrikeClip != null ? heavyStrikeClip : hitClip, CombatVolume);
+    public void PlayTakedown() => PlaySfx(takedownClip != null ? takedownClip : hitClip, CombatVolume);
+    public void PlaySubmissionMove() => PlaySfx(submissionClip != null ? submissionClip : hitClip, CombatVolume);
+
+    // Part 4: combo trigger - fired once per activation by the caller (BattleScreen).
+    public void PlayComboTrigger() => PlaySfx(comboTriggerClip != null ? comboTriggerClip : criticalHitClip, EmphasisVolume);
+
+    // Part 5: level-up.
+    public void PlayLevelUp() => PlaySfx(levelUpClip, ResultVolume);
+
+    // Part 7: rival system.
+    public void PlayRivalEncounter() => PlaySfx(rivalEncounterClip != null ? rivalEncounterClip : criticalHitClip, EmphasisVolume);
+    public void PlayRivalVictory() => PlaySfx(rivalVictoryClip != null ? rivalVictoryClip : championVictoryClip, ResultVolume + 0.05f);
+
+    // Part 6: alternates randomly between the two defeat clips; if only one
+    // happens to be missing, falls back to whichever exists.
+    AudioClip PickDefeatClip()
+    {
+        if (defeatClip1 != null && defeatClip2 != null)
+            return Random.value < 0.5f ? defeatClip1 : defeatClip2;
+        return defeatClip1 != null ? defeatClip1 : defeatClip2;
+    }
+
+    // Part 9: fail safely - a missing clip (null) or missing AudioSource is a
+    // silent no-op, never an exception. volumeScale is clamped so a slightly
+    // over-tuned category can never clip/exceed the source's own output volume.
+    void PlaySfx(AudioClip clip, float volumeScale = 1f)
     {
         if (clip == null || sfxSource == null) return;
-        sfxSource.PlayOneShot(clip);
+        sfxSource.PlayOneShot(clip, Mathf.Clamp(volumeScale, 0f, 1.5f));
     }
 
     void OnDestroy()
