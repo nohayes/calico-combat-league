@@ -35,6 +35,15 @@ public class GameManager : MonoBehaviour
     // Gyms cleared by the CURRENT fighter (resets per playthrough, unlike the lifetime stats above).
     public int TotalGymsCleared => completedGymIds.Count;
 
+    // Milestone 29: per-playthrough flag controlling the rival's one-time first-appearance line.
+    public bool HasSeenRivalIntro => hasSeenRivalIntro;
+    bool hasSeenRivalIntro;
+
+    // Milestone 30, Part 1: the currently-rolled Street Fight encounter. Pure
+    // runtime state - never saved, regenerated fresh each time the player
+    // opens the Street Fight screen or hits Reroll.
+    public StreetFightOpponent CurrentStreetFightOpponent { get; private set; }
+
     readonly HashSet<string> unlockedAchievementIds = new HashSet<string>();
     readonly List<ChampionRecord> hallOfChampions = new List<ChampionRecord>();
 
@@ -84,6 +93,7 @@ public class GameManager : MonoBehaviour
         inventory.Clear();
         combatBuffActive = false;
         activeCombatBuffAmount = 0;
+        hasSeenRivalIntro = false;
         ChangeState(GameState.FighterCreation);
     }
 
@@ -95,9 +105,20 @@ public class GameManager : MonoBehaviour
         inventory.Clear();
         combatBuffActive = false;
         activeCombatBuffAmount = 0;
+        hasSeenRivalIntro = false;
         Player = FighterData.CreateNewPlayer(name, archetype);
         SaveGame();
         ChangeState(GameState.GymMap);
+    }
+
+    // Milestone 29: called once by GymMapScreen when it shows the rival's
+    // first-appearance line, so a re-Refresh (e.g. returning from another
+    // screen) never shows it twice in the same run.
+    public void MarkRivalIntroSeen()
+    {
+        if (hasSeenRivalIntro) return;
+        hasSeenRivalIntro = true;
+        SaveGame();
     }
 
     public bool IsGymUnlocked(GymInfo gym)
@@ -137,6 +158,24 @@ public class GameManager : MonoBehaviour
 
         CurrentGym = gym;
         ChangeState(GameState.GymScreen);
+    }
+
+    // Milestone 30, Part 1: a randomized optional battle outside gym progression.
+    // Uses a synthetic GymInfo with no Leader/RequiredGymId - the same pattern
+    // the Shadow Champion fight already established - so EndBattle's gym-clear
+    // and championship bookkeeping naturally no-ops for it. Nothing here writes
+    // to completedGymIds, so gym progression is untouched.
+    public void RollStreetFightOpponent()
+    {
+        CurrentStreetFightOpponent = StreetFightGenerator.Generate(this);
+    }
+
+    public void StartStreetFight()
+    {
+        if (Player == null || CurrentStreetFightOpponent == null) return;
+
+        CurrentGym = new GymInfo { GymId = "street_fight", GymName = "Street Fight", GymType = GymType.Boxing };
+        StartBattle(CurrentStreetFightOpponent.Opponent);
     }
 
     public void StartBattle(OpponentInfo opponent)
@@ -237,6 +276,7 @@ public class GameManager : MonoBehaviour
             }
 
             if (becameChampionJustNow) RecordChampionLegacy();
+            if (CurrentOpponentInfo.OpponentId == ShadowChampionId) RecordShadowChampionVictory();
 
             CheckAchievements();
             SaveGame();
@@ -260,6 +300,68 @@ public class GameManager : MonoBehaviour
             FinalLevel = Player.Stats.Level,
             TotalWinsAtCompletion = TotalWins,
             CompletionDate = DateTime.Now.ToString("yyyy-MM-dd")
+        });
+    }
+
+    // ---------- Shadow Champion (Milestone 26) ----------
+    // A secret post-championship fight against a mirror of the player's own
+    // current fighter. Built entirely on existing systems: StartBattle already
+    // does everything a fight needs once given an OpponentInfo, and
+    // GymType.Championship already gets the strongest Fight Night presentation
+    // tier (see BattleScreen) with zero extra code.
+
+    public const string ShadowChampionId = "shadow_champion";
+
+    public bool HasDefeatedShadowChampion => defeatedOpponentIds.Contains(ShadowChampionId);
+
+    public void StartShadowChampionBattle()
+    {
+        if (Player == null || !HasBecomeChampion()) return;
+
+        var mirroredStats = Player.Stats.Clone();
+        mirroredStats.MaxHealth = Mathf.RoundToInt(mirroredStats.MaxHealth * 1.1f);
+        mirroredStats.MaxStamina = Mathf.RoundToInt(mirroredStats.MaxStamina * 1.1f);
+        mirroredStats.Speed = Mathf.RoundToInt(mirroredStats.Speed * 1.1f);
+        mirroredStats.ResetForBattle();
+
+        var shadowOpponent = new OpponentInfo
+        {
+            OpponentId = ShadowChampionId,
+            Name = $"Shadow {Player.Name}",
+            Stats = mirroredStats,
+            Moves = new List<MoveData>(Player.EquippedMoves),
+            RewardXP = 300,
+            RewardCoins = 150,
+            Nickname = "Your Reflection",
+            Quote = "Every move you know, I know. Every habit you have, I have. The only question left is which one of us blinks first.",
+            Bio = $"A perfect reflection of {Player.Name} - same hands, same instincts, same scars. It has studied every fight you've ever won. Now it wants to win one of its own.",
+            LossLine = "...Huh. Didn't expect to lose to myself. Good. Be better than this version of you.",
+            WinLine = "Of course I won. I'm you, on your best day. Come back when you're better than your best day."
+        };
+
+        // GymType.Championship alone gives the fight the strongest existing
+        // presentation tier; leaving Leader/Trainers null means EndBattle's
+        // normal gym-completion bookkeeping is a no-op for this synthetic gym.
+        CurrentGym = new GymInfo
+        {
+            GymId = "shadow_gym",
+            GymName = "The Shadow Gym",
+            GymType = GymType.Championship
+        };
+
+        StartBattle(shadowOpponent);
+    }
+
+    void RecordShadowChampionVictory()
+    {
+        hallOfChampions.Add(new ChampionRecord
+        {
+            FighterName = Player.Name,
+            Archetype = Player.Archetype.ToString(),
+            FinalLevel = Player.Stats.Level,
+            TotalWinsAtCompletion = TotalWins,
+            CompletionDate = DateTime.Now.ToString("yyyy-MM-dd"),
+            Title = "Shadow Slayer"
         });
     }
 
@@ -384,6 +486,14 @@ public class GameManager : MonoBehaviour
         var item = ItemDatabase.GetById(itemId);
         if (item == null) return null;
 
+        if (item.EffectType == ItemEffectType.RestoreStamina &&
+            Player.Stats.CurrentStamina >= Player.Stats.MaxStamina)
+            return $"{Player.Name} cannot use {item.Name}: stamina is already full.";
+
+        if (item.EffectType == ItemEffectType.RestoreHealth &&
+            Player.Stats.CurrentHealth >= Player.Stats.MaxHealth)
+            return $"{Player.Name} cannot use {item.Name}: health is already full.";
+
         string logLine = ApplyItemEffect(item);
         if (logLine == null) return null;
 
@@ -470,12 +580,12 @@ public class GameManager : MonoBehaviour
             Archetype = Player.Archetype,
             MaxHealth = Player.Stats.MaxHealth,
             MaxStamina = Player.Stats.MaxStamina,
-            Strength = Player.Stats.Strength,
+            Strength = Player.Stats.Strength - (combatBuffActive ? activeCombatBuffAmount : 0),
             Defense = Player.Stats.Defense,
             Speed = Player.Stats.Speed,
-            Striking = Player.Stats.Striking,
-            Grappling = Player.Stats.Grappling,
-            Submission = Player.Stats.Submission,
+            Striking = Player.Stats.Striking - (combatBuffActive ? activeCombatBuffAmount : 0),
+            Grappling = Player.Stats.Grappling - (combatBuffActive ? activeCombatBuffAmount : 0),
+            Submission = Player.Stats.Submission - (combatBuffActive ? activeCombatBuffAmount : 0),
             KnownMoveIds = Player.KnownMoves.Select(m => m.Id).ToList(),
             EquippedMoveIds = Player.EquippedMoves.Select(m => m.Id).ToList(),
             DefeatedOpponentIds = defeatedOpponentIds.ToList(),
@@ -491,7 +601,8 @@ public class GameManager : MonoBehaviour
             MaxSingleHitDamage = MaxSingleHitDamage,
             SubmissionWins = SubmissionWins,
             UnlockedAchievementIds = unlockedAchievementIds.ToList(),
-            HallOfChampions = hallOfChampions.ToList()
+            HallOfChampions = hallOfChampions.ToList(),
+            HasSeenRivalIntro = hasSeenRivalIntro
         };
 
         SaveSystem.Save(data);
@@ -572,6 +683,11 @@ public class GameManager : MonoBehaviour
         hallOfChampions.Clear();
         if (data.HallOfChampions != null)
             hallOfChampions.AddRange(data.HallOfChampions);
+
+        // Milestone 29: saves from before this milestone default to false here.
+        // If the fighter already has progress, treat the rival as already met
+        // instead of showing a "rookie" greeting mid-career.
+        hasSeenRivalIntro = data.HasSeenRivalIntro || TotalWins > 0 || completedGymIds.Count > 0 || hallOfChampions.Count > 0;
 
         return true;
     }

@@ -7,16 +7,25 @@ public class MovesScreen : UIScreen
     readonly Transform equippedContainer;
     readonly Transform knownContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
+    readonly Image avatarImage;
+    readonly PlayerAvatarVisual avatarVisual;
 
-    public MovesScreen(Transform parent, GameManager gm) : base(parent, gm, "MovesScreen")
+    public MovesScreen(Transform parent, GameManager gm) : base(parent, gm, "MovesScreen", "gym_map")
     {
-        UIFactory.CreateHeading(Root.transform, "MOVES", new Vector2(0.06f, 0.9f), new Vector2(0.94f, 0.98f));
+        UIFactory.CreateHeading(Root.transform, "MOVES", new Vector2(0.06f, 0.9f), new Vector2(0.74f, 0.98f));
 
-        UIFactory.CreateCaption(Root.transform, "EQUIPPED  (tap to unequip)", new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.88f));
-        equippedContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.05f, 0.55f), new Vector2(0.95f, 0.82f));
+        // Milestone 25, Part 4: small fighter-identity badge - the avatar shows up
+        // here too instead of only on presentation-heavy screens.
+        var avatarMarker = UIFactory.CreateAvatarMarker(Root.transform, "Player", new Vector2(0.78f, 0.9f), new Vector2(0.95f, 0.98f), out avatarImage);
+        avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
 
-        UIFactory.CreateCaption(Root.transform, "KNOWN MOVES  (tap to equip)", new Vector2(0.05f, 0.46f), new Vector2(0.95f, 0.52f));
-        knownContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.05f, 0.15f), new Vector2(0.95f, 0.46f));
+        // Milestone 28: narrowed from edge-to-edge (a portrait-era width) to a
+        // centered column so rows don't read as empty stretched strips on 16:9.
+        UIFactory.CreateCaption(Root.transform, "EQUIPPED  (tap to unequip)", new Vector2(0.15f, 0.82f), new Vector2(0.85f, 0.88f));
+        equippedContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.55f), new Vector2(0.85f, 0.82f));
+
+        UIFactory.CreateCaption(Root.transform, "KNOWN MOVES  (tap to equip)", new Vector2(0.15f, 0.46f), new Vector2(0.85f, 0.52f));
+        knownContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.46f));
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
@@ -32,6 +41,9 @@ public class MovesScreen : UIScreen
             Debug.LogWarning("MovesScreen.Refresh: no player data.");
             return;
         }
+
+        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
+        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
 
         var equipped = GM.Player.EquippedMoves;
         for (int i = 0; i < equipped.Count; i++)
@@ -83,7 +95,8 @@ public class MovesScreen : UIScreen
         var iconImage = iconGo.GetComponent<Image>();
         var realIcon = ArtRegistry.GetMoveIcon(move.Id);
         iconImage.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetMoveTypeIconShape(move.Type));
-        iconImage.color = UIFactory.CreamColor;
+        iconImage.preserveAspect = true;
+        iconImage.color = realIcon != null ? Color.white : IconFactory.GetMoveTypeThemeColor(move.Type);
 
         return button;
     }

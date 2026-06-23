@@ -2,41 +2,25 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+// Milestone 27: fighter lineup redesign. The old gym-banner + vertical trainer
+// list is replaced with a horizontal fighter select screen (gym background
+// visible behind it, no banner/logo/quote) generated from the current gym's
+// existing Trainers + Leader data - nothing here is hardcoded per gym, so any
+// future gym with a different roster size works automatically.
 public class GymScreen : UIScreen
 {
-    readonly Image banner;
-    readonly Image bannerIcon;
-    readonly Text bannerName;
-    readonly Text bannerMotto;
-    readonly Text bannerDescription;
-    readonly Transform listContainer;
+    readonly Text gymHeading;
+    readonly Transform fighterRow;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
 
     public GymScreen(Transform parent, GameManager gm) : base(parent, gm, "GymScreen")
     {
-        var bannerRt = UIFactory.CreateCard(Root.transform, "Banner", new Vector2(0.05f, 0.78f), new Vector2(0.95f, 0.97f));
-        banner = bannerRt.GetComponent<Image>();
+        gymHeading = UIFactory.CreateHeading(Root.transform, "", new Vector2(0.2f, 0.88f), new Vector2(0.8f, 0.98f));
 
-        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        iconGo.transform.SetParent(bannerRt, false);
-        var iconRt = iconGo.GetComponent<RectTransform>();
-        iconRt.anchorMin = new Vector2(0.03f, 0.18f);
-        iconRt.anchorMax = new Vector2(0.22f, 0.82f);
-        iconRt.offsetMin = Vector2.zero;
-        iconRt.offsetMax = Vector2.zero;
-        bannerIcon = iconGo.GetComponent<Image>();
+        fighterRow = UIFactory.CreateContainer(Root.transform, new Vector2(0.04f, 0.18f), new Vector2(0.96f, 0.84f));
 
-        bannerName = UIFactory.CreateText(bannerRt, "", UIFactory.SubheadingSize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
-            new Vector2(0.26f, 0.62f), new Vector2(0.97f, 0.94f), FontStyle.Bold);
-        bannerMotto = UIFactory.CreateText(bannerRt, "", UIFactory.CaptionSize, UIFactory.GoldColor, TextAnchor.MiddleLeft,
-            new Vector2(0.26f, 0.46f), new Vector2(0.97f, 0.6f), FontStyle.Italic);
-        bannerDescription = UIFactory.CreateText(bannerRt, "", UIFactory.CaptionSize, UIFactory.CreamColor, TextAnchor.UpperLeft,
-            new Vector2(0.26f, 0.06f), new Vector2(0.97f, 0.44f));
-
-        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.08f, 0.14f), new Vector2(0.92f, 0.76f));
-
-        UIFactory.CreateButton(Root.transform, "BACK TO MAP", new Vector2(0.25f, 0.04f), new Vector2(0.75f, 0.13f),
-            () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "BACK TO MAP", new Vector2(0.35f, 0.03f), new Vector2(0.65f, 0.14f),
+            () => GM.ChangeState(GameState.GymSelection), UIFactory.SecondaryColor);
     }
 
     public void Refresh()
@@ -47,55 +31,111 @@ public class GymScreen : UIScreen
         var gym = GM.CurrentGym;
         if (gym == null || gym.Trainers == null || gym.Leader == null)
         {
-            bannerName.text = "NO GYM SELECTED";
-            bannerDescription.text = "";
+            gymHeading.text = "NO GYM SELECTED";
             Debug.LogWarning("GymScreen.Refresh: current gym is missing or incomplete.");
             return;
         }
 
+        // Gym background stays visible behind the lineup - no banner/panel covers it.
         UIFactory.ApplyScreenBackground(Root, $"{gym.GymId}_background");
+        gymHeading.text = gym.GymName.ToUpper();
 
-        Color theme = IconFactory.GetGymThemeColor(gym.GymType);
-        banner.color = theme;
-        var realIcon = ArtRegistry.GetGymIcon(gym.GymId);
-        bannerIcon.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
-        bannerIcon.color = UIFactory.CreamColor;
-
-        bannerName.text = gym.GymName.ToUpper();
-        bannerMotto.text = !string.IsNullOrEmpty(gym.Motto) ? $"\"{gym.Motto}\"" : "";
-        bannerDescription.text = !string.IsNullOrEmpty(gym.Description) ? gym.Description : gym.GymType.ToString();
-
-        int totalSlots = gym.Trainers.Count + 1;
-        for (int i = 0; i < gym.Trainers.Count; i++)
-        {
-            var opponent = gym.Trainers[i];
-            bool defeated = GM.IsOpponentDefeated(opponent);
-            string nicknameTag = !string.IsNullOrEmpty(opponent.Nickname) ? $" \"{opponent.Nickname}\"" : "";
-            string label = defeated ? $"{opponent.Name}{nicknameTag}  (Cleared)" : $"{opponent.Name}{nicknameTag}";
-            Color color = defeated ? UIFactory.PositiveColor : UIFactory.AccentOrange;
-            CreateOpponentButton(label, i, totalSlots, enabled: true, opponent: opponent, color: color);
-        }
-
+        // Lineup order matches the existing roster order (trainers, then the
+        // leader last) - reuses GymInfo as-is, no new trainer data or database.
+        var lineup = new List<OpponentInfo>(gym.Trainers) { gym.Leader };
         bool leaderUnlocked = GM.IsLeaderUnlocked(gym);
-        string rematchSuffix = GM.HasBecomeChampion() ? "  (Rematch)" : "";
-        string leaderNickname = !string.IsNullOrEmpty(gym.Leader.Nickname) ? $" \"{gym.Leader.Nickname}\"" : "";
-        string leaderLabel = leaderUnlocked ? $"LEADER: {gym.Leader.Name}{leaderNickname}{rematchSuffix}" : "LEADER (LOCKED)";
-        Color leaderColor = leaderUnlocked ? UIFactory.GoldColor : UIFactory.LockedColor;
-        CreateOpponentButton(leaderLabel, gym.Trainers.Count, totalSlots, enabled: leaderUnlocked, opponent: gym.Leader, color: leaderColor);
+
+        for (int i = 0; i < lineup.Count; i++)
+        {
+            bool isLeader = i == lineup.Count - 1;
+            bool unlocked = !isLeader || leaderUnlocked;
+            BuildFighterSlot(lineup[i], i, lineup.Count, unlocked);
+        }
     }
 
-    void CreateOpponentButton(string label, int index, int totalSlots, bool enabled, OpponentInfo opponent, Color color)
+    // One slot = a nameplate (white/black-bordered, per spec) above a clickable
+    // fighter portrait that uses the exact same portrait pipeline (ArtRegistry /
+    // SetFighterPortrait) every other screen already uses - no new sprites.
+    void BuildFighterSlot(OpponentInfo opponent, int index, int total, bool unlocked)
     {
-        float slotHeight = 1f / totalSlots;
-        float padding = slotHeight * 0.14f;
-        float yMax = 1f - index * slotHeight - padding;
-        float yMin = 1f - (index + 1) * slotHeight + padding;
+        float slotWidth = 1f / total;
+        float gap = slotWidth * 0.05f;
+        float xMin = index * slotWidth + gap;
+        float xMax = (index + 1) * slotWidth - gap;
 
-        Color buttonColor = enabled ? color : UIFactory.LockedColor;
-        var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.05f, yMin), new Vector2(0.95f, yMax),
-            () => GM.StartBattle(opponent), buttonColor);
-        button.interactable = enabled;
+        var slot = UIFactory.CreateContainer(fighterRow, new Vector2(xMin, 0f), new Vector2(xMax, 1f));
+        dynamicEntries.Add(slot.gameObject);
 
-        dynamicEntries.Add(button.gameObject);
+        // Nameplate: black border (slightly larger black rect behind) + white
+        // plate + black text, centered above the fighter.
+        var borderGo = new GameObject("NameplateBorder", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        borderGo.transform.SetParent(slot, false);
+        var borderRt = borderGo.GetComponent<RectTransform>();
+        borderRt.anchorMin = new Vector2(0.06f, 0.89f);
+        borderRt.anchorMax = new Vector2(0.94f, 1f);
+        borderRt.offsetMin = Vector2.zero;
+        borderRt.offsetMax = Vector2.zero;
+        borderGo.GetComponent<Image>().color = Color.black;
+
+        var plateGo = new GameObject("Nameplate", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        plateGo.transform.SetParent(borderGo.transform, false);
+        var plateRt = plateGo.GetComponent<RectTransform>();
+        plateRt.anchorMin = Vector2.zero;
+        plateRt.anchorMax = Vector2.one;
+        plateRt.offsetMin = new Vector2(3f, 3f);
+        plateRt.offsetMax = new Vector2(-3f, -3f);
+        plateGo.GetComponent<Image>().color = Color.white;
+
+        var nameText = UIFactory.CreateText(plateGo.transform, opponent.Name, UIFactory.CaptionSize, Color.black,
+            TextAnchor.MiddleCenter, Vector2.zero, Vector2.one, FontStyle.Bold);
+        nameText.resizeTextForBestFit = true;
+        nameText.resizeTextMinSize = 10;
+        nameText.resizeTextMaxSize = UIFactory.CaptionSize;
+        nameText.raycastTarget = false;
+
+        // The fighter sprite itself is the button.
+        var fighterGo = new GameObject("Fighter_" + opponent.OpponentId, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        fighterGo.transform.SetParent(slot, false);
+        var fighterRt = fighterGo.GetComponent<RectTransform>();
+        fighterRt.anchorMin = new Vector2(0.04f, 0.06f);
+        fighterRt.anchorMax = new Vector2(0.96f, 0.85f);
+        fighterRt.offsetMin = Vector2.zero;
+        fighterRt.offsetMax = Vector2.zero;
+
+        var gym = GM.CurrentGym;
+        ArchetypeType archetype = IconFactory.GetPortraitArchetype(gym.GymType);
+        Color theme = IconFactory.GetGymThemeColor(gym.GymType);
+        var fighterImage = fighterGo.GetComponent<Image>();
+        fighterImage.preserveAspect = true;
+        UIFactory.SetFighterPortrait(fighterImage, opponent.OpponentId, archetype, theme);
+        if (!unlocked)
+        {
+            var c = fighterImage.color;
+            fighterImage.color = new Color(c.r * 0.45f, c.g * 0.45f, c.b * 0.45f, c.a);
+        }
+        else
+        {
+            // Milestone 28: subtle hover feedback on selectable fighters.
+            fighterGo.AddComponent<HoverGlow>();
+        }
+
+        var button = fighterGo.GetComponent<Button>();
+        button.targetGraphic = fighterImage;
+        button.interactable = unlocked;
+        fighterGo.AddComponent<ButtonPunch>();
+        button.onClick.AddListener(() =>
+        {
+            AudioManager.Instance?.PlayClick();
+            PlayPulse(fighterRt, 1.15f, 0.2f);
+            GM.StartBattle(opponent);
+        });
+
+        if (!unlocked)
+        {
+            var lockedText = UIFactory.CreateCaption(slot, "LOCKED", new Vector2(0.04f, 0.0f), new Vector2(0.96f, 0.07f), TextAnchor.MiddleCenter);
+            lockedText.color = UIFactory.LockedColor;
+            lockedText.fontStyle = FontStyle.Bold;
+            lockedText.raycastTarget = false;
+        }
     }
 }

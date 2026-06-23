@@ -1,0 +1,82 @@
+Calico Combat League - Audio Style Guide
+==========================================
+
+CORE IDENTITY
+-------------
+The league should sound organized, competitive, warm, and slightly theatrical:
+a real regional combat promotion with a distinctive calico-orange personality.
+Use recurring percussion, bass, and short brass motifs to connect venues. Avoid
+licensed samples, recognizable melodies, crowd chants with intelligible words,
+and sounds that compete with combat impacts.
+
+All tempo ranges are creative targets, not gameplay requirements. Music should
+loop cleanly and should reserve headroom for UI and fight SFX.
+
+MAIN MENU
+Mood: Confident, welcoming, anticipatory.
+Tempo: 88-96 BPM.
+Instruments: Warm bass, tight drums, muted brass, clean electric guitar.
+Energy: 2/5. Establish the league without exhausting the player.
+
+BOXING GYM
+Mood: Gritty, focused, old-school work ethic.
+Tempo: 100-108 BPM.
+Instruments: Dry kick/snare, upright or electric bass, muted trumpet, handclaps.
+Energy: 3/5. Steady forward motion with a disciplined pulse.
+
+MUAY THAI GYM
+Mood: Precise, agile, respectful, dangerous.
+Tempo: 108-116 BPM.
+Instruments: Hand drums, small cymbals, plucked strings, restrained reed lead.
+Energy: 3/5. Layered rhythm should suggest eight-limb movement, not caricature.
+
+WRESTLING GYM
+Mood: Heavy, relentless, grounded.
+Tempo: 96-104 BPM.
+Instruments: Low toms, bass guitar, low strings, stomps, short horn pulses.
+Energy: 3/5. Weight and repetition should imply pressure and control.
+
+BJJ ACADEMY
+Mood: Patient, technical, quietly tense.
+Tempo: 82-92 BPM.
+Instruments: Soft hand percussion, acoustic bass, marimba or muted plucks, pads.
+Energy: 2/5. Leave space and build tension through subtle interlocking patterns.
+
+CHAMPIONSHIP GYM
+Mood: Elite, imposing, prestigious.
+Tempo: 112-120 BPM.
+Instruments: Hybrid drums, low brass, cinematic strings, restrained synth pulse.
+Energy: 4/5. Reuse the league motif in a larger, more serious arrangement.
+
+BATTLE
+Mood: Urgent, kinetic, broadcast-ready.
+Tempo: 124-132 BPM.
+Instruments: Punchy drums, synth bass, brass stabs, rhythmic low strings.
+Energy: 5/5. Maintain momentum without masking impacts or tiring the listener.
+
+VICTORY
+Mood: Earned relief, momentum, celebration.
+Tempo: 118-126 BPM.
+Instruments: Bright brass, full drums, rising bass, concise league motif.
+Energy: 4/5. Resolve quickly into a loop that can sit under reward reading.
+
+DEFEAT
+Mood: Disappointed but determined, never humiliating.
+Tempo: 68-78 BPM.
+Instruments: Sparse piano, low pad, soft floor tom, subdued bass.
+Energy: 1/5. Keep it brief and leave emotional room for another attempt.
+
+CHAMPION CELEBRATION
+Mood: Triumphant, historic, unmistakably league championship.
+Tempo: 128-136 BPM.
+Instruments: Brass fanfare, full drums, cymbal lifts, strings, league motif.
+Energy: 5/5. The largest arrangement in the game, festive rather than ominous.
+
+MIXING TARGETS
+--------------
+- Deliver music around -3 dBFS peak with consistent perceived loudness.
+- Keep the midrange open for impacts and future announcer voice if ever desired.
+- Avoid excessive sub-bass that translates poorly on phone speakers.
+- Check every track on phone speakers, earbuds, and at low master volume.
+- Keep SFX transient and centered; music may use a wider stereo image.
+- Do not bake fades into looping files. Runtime transitions provide the fades.

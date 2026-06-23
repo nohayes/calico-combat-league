@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 public abstract class UIScreen
 {
@@ -35,4 +36,11 @@ public abstract class UIScreen
 
     // Lets subclasses (e.g. the Championship screen) trigger a one-off celebration burst.
     protected void PlayCelebration(int pieceCount = 16) => transitionRunner.SpawnConfetti(Root.transform, pieceCount);
+    protected void RunAnimation(IEnumerator routine) => transitionRunner.Run(routine);
+    protected void PlayTimeImpact(float scale = 0.3f, float duration = 0.12f) => transitionRunner.PlayTimeImpact(scale, duration);
+    protected void PlayPulse(RectTransform target, float peakScale = 1.08f, float duration = 0.45f) =>
+        transitionRunner.PlayPulse(target, peakScale, duration);
+    protected void PlayReveal(CanvasGroup group, RectTransform target, float delay = 0.2f, float duration = 0.35f) =>
+        transitionRunner.PlayReveal(group, target, delay, duration);
+    protected void PlayExhausted(RectTransform target) => transitionRunner.PlayExhausted(target);
 }

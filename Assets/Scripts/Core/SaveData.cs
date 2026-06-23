@@ -42,4 +42,10 @@ public class SaveData
 
     // Persists across StartNewGame/StartFreshGame - a permanent meta-progression record.
     public List<ChampionRecord> HallOfChampions = new List<ChampionRecord>();
+
+    // Milestone 29: per-playthrough flag so the rival's first-appearance line
+    // shows once per run. Missing on older saves -> defaults to false, but
+    // GameManager.LoadGame backfills it to true for saves that already have
+    // progress, so returning players don't get a "rookie" greeting mid-career.
+    public bool HasSeenRivalIntro;
 }

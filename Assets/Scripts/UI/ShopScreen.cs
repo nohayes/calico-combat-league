@@ -7,15 +7,22 @@ public class ShopScreen : UIScreen
     readonly Text headerText;
     readonly Transform listContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
+    readonly Image avatarImage;
+    readonly PlayerAvatarVisual avatarVisual;
 
-    public ShopScreen(Transform parent, GameManager gm) : base(parent, gm, "ShopScreen")
+    public ShopScreen(Transform parent, GameManager gm) : base(parent, gm, "ShopScreen", "gym_map")
     {
-        UIFactory.CreateHeading(Root.transform, "SHOP", new Vector2(0.05f, 0.9f), new Vector2(0.95f, 0.98f));
+        UIFactory.CreateHeading(Root.transform, "SHOP", new Vector2(0.05f, 0.9f), new Vector2(0.76f, 0.98f));
+
+        // Milestone 25, Part 4: small fighter-identity badge.
+        var avatarMarker = UIFactory.CreateAvatarMarker(Root.transform, "Player", new Vector2(0.79f, 0.9f), new Vector2(0.95f, 0.98f), out avatarImage);
+        avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
 
         headerText = UIFactory.CreateText(Root.transform, "", UIFactory.SubheadingSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
-            new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.89f));
+            new Vector2(0.15f, 0.82f), new Vector2(0.85f, 0.89f));
 
-        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.05f, 0.15f), new Vector2(0.95f, 0.8f));
+        // Milestone 28: narrowed to a centered column (was edge-to-edge).
+        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.8f));
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
@@ -33,6 +40,9 @@ public class ShopScreen : UIScreen
         }
 
         headerText.text = $"Coins: {GM.Player.Stats.Coins}";
+
+        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
+        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
 
         var items = ItemDatabase.All;
         for (int i = 0; i < items.Count; i++)

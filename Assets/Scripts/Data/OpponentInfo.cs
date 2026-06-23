@@ -14,4 +14,12 @@ public class OpponentInfo
     public string Nickname;
     public string Quote;
     public string Description;
+
+    // Personality flavor (Milestone 22). Also optional/empty-safe. Bio is shown
+    // in the pre-fight intro; LossLine is what this opponent says when the player
+    // beats them (shown on Victory); WinLine is what they say when they beat the
+    // player (shown on Defeat).
+    public string Bio;
+    public string LossLine;
+    public string WinLine;
 }

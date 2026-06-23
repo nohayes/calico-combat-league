@@ -10,7 +10,7 @@ public class FighterCreationScreen : UIScreen
     readonly List<GameObject> archetypeButtons = new List<GameObject>();
     ArchetypeType selectedArchetype;
 
-    public FighterCreationScreen(Transform parent, GameManager gm) : base(parent, gm, "FighterCreationScreen")
+    public FighterCreationScreen(Transform parent, GameManager gm) : base(parent, gm, "FighterCreationScreen", "main_menu")
     {
         UIFactory.CreateHeading(Root.transform, "CREATE YOUR FIGHTER", new Vector2(0.06f, 0.89f), new Vector2(0.94f, 0.97f));
 
@@ -45,6 +45,14 @@ public class FighterCreationScreen : UIScreen
 
             var button = UIFactory.CreateButton(archetypeContainer, info.DisplayName, new Vector2(xMin, 0f), new Vector2(xMax, 1f),
                 () => SelectArchetype(info.Type), UIFactory.SecondaryColor);
+
+            var label = button.GetComponentInChildren<Text>();
+            label.rectTransform.anchorMin = new Vector2(0.03f, 0.02f);
+            label.rectTransform.anchorMax = new Vector2(0.97f, 0.34f);
+
+            Color theme = IconFactory.GetArchetypeThemeColor(info.Type);
+            UIFactory.CreateFighterThumbnail(button.transform, null, info.Type, theme,
+                new Vector2(0.18f, 0.38f), new Vector2(0.82f, 0.96f));
             archetypeButtons.Add(button.gameObject);
         }
     }

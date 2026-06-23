@@ -5,6 +5,7 @@ public class UIManager : MonoBehaviour
     MainMenuScreen mainMenu;
     FighterCreationScreen fighterCreation;
     GymMapScreen gymMap;
+    GymSelectionScreen gymSelection;
     GymScreen gymScreen;
     BattleScreen battleScreen;
     VictoryScreen victoryScreen;
@@ -16,6 +17,8 @@ public class UIManager : MonoBehaviour
     AchievementsScreen achievementsScreen;
     ProfileScreen profileScreen;
     HallOfChampionsScreen hallOfChampionsScreen;
+    SettingsScreen settingsScreen;
+    StreetFightScreen streetFightScreen;
 
     void Start()
     {
@@ -24,6 +27,7 @@ public class UIManager : MonoBehaviour
         mainMenu = new MainMenuScreen(transform, gm);
         fighterCreation = new FighterCreationScreen(transform, gm);
         gymMap = new GymMapScreen(transform, gm);
+        gymSelection = new GymSelectionScreen(transform, gm);
         gymScreen = new GymScreen(transform, gm);
         battleScreen = new BattleScreen(transform, gm);
         victoryScreen = new VictoryScreen(transform, gm);
@@ -35,6 +39,8 @@ public class UIManager : MonoBehaviour
         achievementsScreen = new AchievementsScreen(transform, gm);
         profileScreen = new ProfileScreen(transform, gm);
         hallOfChampionsScreen = new HallOfChampionsScreen(transform, gm);
+        settingsScreen = new SettingsScreen(transform, gm);
+        streetFightScreen = new StreetFightScreen(transform, gm);
 
         gm.OnStateChanged += HandleStateChanged;
         HandleStateChanged(gm.State);
@@ -42,9 +48,12 @@ public class UIManager : MonoBehaviour
 
     void HandleStateChanged(GameState state)
     {
+        AudioManager.Instance?.PlayForState(state, GameManager.Instance.CurrentGym);
+
         mainMenu.SetVisible(state == GameState.MainMenu);
         fighterCreation.SetVisible(state == GameState.FighterCreation);
         gymMap.SetVisible(state == GameState.GymMap);
+        gymSelection.SetVisible(state == GameState.GymSelection);
         gymScreen.SetVisible(state == GameState.GymScreen);
         battleScreen.SetVisible(state == GameState.Battle);
         victoryScreen.SetVisible(state == GameState.Victory);
@@ -56,6 +65,8 @@ public class UIManager : MonoBehaviour
         achievementsScreen.SetVisible(state == GameState.AchievementsScreen);
         profileScreen.SetVisible(state == GameState.ProfileScreen);
         hallOfChampionsScreen.SetVisible(state == GameState.HallOfChampionsScreen);
+        settingsScreen.SetVisible(state == GameState.Settings);
+        streetFightScreen.SetVisible(state == GameState.StreetFight);
 
         switch (state)
         {
@@ -64,6 +75,9 @@ public class UIManager : MonoBehaviour
                 break;
             case GameState.GymMap:
                 gymMap.Refresh();
+                break;
+            case GameState.GymSelection:
+                gymSelection.Refresh();
                 break;
             case GameState.GymScreen:
                 gymScreen.Refresh();
@@ -97,6 +111,12 @@ public class UIManager : MonoBehaviour
                 break;
             case GameState.HallOfChampionsScreen:
                 hallOfChampionsScreen.Refresh();
+                break;
+            case GameState.Settings:
+                settingsScreen.Refresh();
+                break;
+            case GameState.StreetFight:
+                streetFightScreen.Refresh();
                 break;
         }
     }

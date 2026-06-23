@@ -10,7 +10,7 @@ public class ProfileScreen : UIScreen
     readonly Text statsText;
     readonly Text statusText;
 
-    public ProfileScreen(Transform parent, GameManager gm) : base(parent, gm, "ProfileScreen")
+    public ProfileScreen(Transform parent, GameManager gm) : base(parent, gm, "ProfileScreen", "gym_map")
     {
         UIFactory.CreateHeading(Root.transform, "FIGHTER PROFILE", new Vector2(0.05f, 0.92f), new Vector2(0.95f, 0.99f));
 
@@ -40,7 +40,16 @@ public class ProfileScreen : UIScreen
         statusText = UIFactory.CreateText(Root.transform, "", UIFactory.BodySize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.08f, 0.17f), new Vector2(0.92f, 0.29f), FontStyle.Bold);
 
-        UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.13f),
+        // Profile is the management hub: Stats, Moves, and Hall of Fame are all
+        // reachable from here (Hall of Fame and Moves no longer have their own
+        // buttons on the Home screen).
+        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.03f, 0.03f), new Vector2(0.25f, 0.13f),
+            () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.27f, 0.03f), new Vector2(0.49f, 0.13f),
+            () => GM.ChangeState(GameState.MovesScreen), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.51f, 0.03f), new Vector2(0.73f, 0.13f),
+            () => GM.ChangeState(GameState.HallOfChampionsScreen), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.75f, 0.03f), new Vector2(0.97f, 0.13f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
     }
 

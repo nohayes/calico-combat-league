@@ -17,6 +17,7 @@ public enum IconShape
 public static class IconFactory
 {
     static readonly Dictionary<IconShape, Sprite> iconCache = new Dictionary<IconShape, Sprite>();
+    static readonly Dictionary<ArchetypeType, Sprite> fighterPlaceholderCache = new Dictionary<ArchetypeType, Sprite>();
 
     static Sprite silhouetteSprite;
 
@@ -73,6 +74,18 @@ public static class IconFactory
         }
     }
 
+    public static ArchetypeType GetPortraitArchetype(GymType type)
+    {
+        switch (type)
+        {
+            case GymType.Boxing: return ArchetypeType.Boxer;
+            case GymType.Wrestling: return ArchetypeType.Wrestler;
+            case GymType.BrazilianJiuJitsu: return ArchetypeType.BjjSpecialist;
+            case GymType.MuayThai: return ArchetypeType.MuayThaiFighter;
+            default: return ArchetypeType.Unspecified;
+        }
+    }
+
     // Move-type icons reuse the same shape language as their parent discipline,
     // with sensible fallbacks for move types that don't have their own gym yet.
     public static IconShape GetMoveTypeIconShape(MoveType type)
@@ -89,6 +102,23 @@ public static class IconFactory
             case MoveType.BrazilianJiuJitsu: return IconShape.Diamond;
             case MoveType.GroundAndPound: return IconShape.Star;
             default: return IconShape.Circle;
+        }
+    }
+
+    public static Color GetMoveTypeThemeColor(MoveType type)
+    {
+        switch (type)
+        {
+            case MoveType.Boxing: return GetGymThemeColor(GymType.Boxing);
+            case MoveType.Wrestling:
+            case MoveType.Judo: return GetGymThemeColor(GymType.Wrestling);
+            case MoveType.BrazilianJiuJitsu: return GetGymThemeColor(GymType.BrazilianJiuJitsu);
+            case MoveType.Kickboxing:
+            case MoveType.MuayThai:
+            case MoveType.Karate:
+            case MoveType.Taekwondo: return GetGymThemeColor(GymType.MuayThai);
+            case MoveType.GroundAndPound: return UIFactory.GoldColor;
+            default: return UIFactory.AccentOrange;
         }
     }
 
@@ -118,6 +148,27 @@ public static class IconFactory
         }
     }
 
+    public static string GetAchievementCategory(AchievementMetric metric)
+    {
+        switch (metric)
+        {
+            case AchievementMetric.TotalWins:
+            case AchievementMetric.MaxSingleHitDamage:
+            case AchievementMetric.SubmissionWins:
+                return "COMBAT";
+            case AchievementMetric.GymsCleared:
+                return "CAREER";
+            case AchievementMetric.MovesKnown:
+                return "MASTERY";
+            case AchievementMetric.CoinsSpent:
+                return "ECONOMY";
+            case AchievementMetric.BecameChampion:
+                return "LEGACY";
+            default:
+                return "LEAGUE";
+        }
+    }
+
     public static Sprite GetShapeSprite(IconShape shape)
     {
         if (iconCache.TryGetValue(shape, out var cached)) return cached;
@@ -129,7 +180,17 @@ public static class IconFactory
 
     public static Sprite GetSilhouetteSprite()
     {
-        return silhouetteSprite ??= GenerateSilhouetteSprite();
+        return silhouetteSprite ??= GenerateSilhouetteSprite(ArchetypeType.Unspecified);
+    }
+
+    public static Sprite GetFighterPlaceholderSprite(ArchetypeType archetype)
+    {
+        if (archetype == ArchetypeType.Unspecified) return GetSilhouetteSprite();
+        if (fighterPlaceholderCache.TryGetValue(archetype, out var cached)) return cached;
+
+        var sprite = GenerateSilhouetteSprite(archetype);
+        fighterPlaceholderCache[archetype] = sprite;
+        return sprite;
     }
 
     static Sprite GenerateShapeSprite(IconShape shape)
@@ -214,15 +275,15 @@ public static class IconFactory
 
     static float Cross(Vector2 a, Vector2 b) => a.x * b.y - a.y * b.x;
 
-    static Sprite GenerateSilhouetteSprite()
+    static Sprite GenerateSilhouetteSprite(ArchetypeType archetype)
     {
         const int size = 96;
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
 
         float headRadius = size * 0.16f;
         float headCenterY = size * 0.72f;
-        float shoulderHalfWidth = size * 0.28f;
-        float hipHalfWidth = size * 0.20f;
+        float shoulderHalfWidth = archetype == ArchetypeType.Wrestler ? size * 0.36f : size * 0.28f;
+        float hipHalfWidth = archetype == ArchetypeType.BjjSpecialist ? size * 0.25f : size * 0.20f;
         float bodyTop = size * 0.56f;
         float bodyBottom = size * 0.05f;
 
@@ -236,6 +297,11 @@ public static class IconFactory
                 float headDy = py - headCenterY;
                 bool inHead = (px * px + headDy * headDy) <= headRadius * headRadius;
 
+                bool inLeftEar = PointInTriangle(new Vector2(px, py),
+                    new Vector2(-14f, 79f), new Vector2(-5f, 92f), new Vector2(-2f, 78f));
+                bool inRightEar = PointInTriangle(new Vector2(px, py),
+                    new Vector2(2f, 78f), new Vector2(5f, 92f), new Vector2(14f, 79f));
+
                 bool inBody = false;
                 if (py >= bodyBottom && py <= bodyTop)
                 {
@@ -244,12 +310,37 @@ public static class IconFactory
                     inBody = Mathf.Abs(px) <= halfWidth;
                 }
 
-                float alpha = (inHead || inBody) ? 1f : 0f;
+                bool disciplineShape = false;
+                switch (archetype)
+                {
+                    case ArchetypeType.Boxer:
+                        disciplineShape = InCircle(px, py, -29f, 57f, 11f) || InCircle(px, py, 29f, 57f, 11f);
+                        break;
+                    case ArchetypeType.Wrestler:
+                        disciplineShape = py >= 42f && py <= 56f && Mathf.Abs(px) <= 38f;
+                        break;
+                    case ArchetypeType.BjjSpecialist:
+                        disciplineShape = py >= 29f && py <= 36f && Mathf.Abs(px) <= 25f;
+                        break;
+                    case ArchetypeType.MuayThaiFighter:
+                        disciplineShape = InCircle(px, py, -25f, 66f, 9f) || InCircle(px, py, 25f, 66f, 9f) ||
+                            InCircle(px, py, 22f, 22f, 12f);
+                        break;
+                }
+
+                float alpha = (inHead || inLeftEar || inRightEar || inBody || disciplineShape) ? 1f : 0f;
                 tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
             }
         }
         tex.Apply();
 
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+    }
+
+    static bool InCircle(float px, float py, float centerX, float centerY, float radius)
+    {
+        float dx = px - centerX;
+        float dy = py - centerY;
+        return dx * dx + dy * dy <= radius * radius;
     }
 }

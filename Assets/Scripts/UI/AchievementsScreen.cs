@@ -8,14 +8,15 @@ public class AchievementsScreen : UIScreen
     readonly Transform listContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
 
-    public AchievementsScreen(Transform parent, GameManager gm) : base(parent, gm, "AchievementsScreen")
+    public AchievementsScreen(Transform parent, GameManager gm) : base(parent, gm, "AchievementsScreen", "gym_map")
     {
         UIFactory.CreateHeading(Root.transform, "ACHIEVEMENTS", new Vector2(0.05f, 0.92f), new Vector2(0.95f, 0.99f));
 
         headerText = UIFactory.CreateText(Root.transform, "", UIFactory.SubheadingSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
-            new Vector2(0.05f, 0.84f), new Vector2(0.95f, 0.91f));
+            new Vector2(0.15f, 0.84f), new Vector2(0.85f, 0.91f));
 
-        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.05f, 0.14f), new Vector2(0.95f, 0.82f));
+        // Milestone 28: narrowed to a centered column (was edge-to-edge).
+        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.14f), new Vector2(0.85f, 0.82f));
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
@@ -63,12 +64,19 @@ public class AchievementsScreen : UIScreen
         var iconImage = iconGo.GetComponent<Image>();
         var realIcon = ArtRegistry.GetAchievementIcon(achievement.Id);
         iconImage.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetAchievementIconShape(achievement.Metric));
-        iconImage.color = unlocked ? UIFactory.GoldColor : UIFactory.MutedTextColor;
+        iconImage.preserveAspect = true;
+        iconImage.color = realIcon != null
+            ? (unlocked ? Color.white : new Color(0.45f, 0.45f, 0.45f, 0.7f))
+            : (unlocked ? UIFactory.GoldColor : UIFactory.MutedTextColor);
+
+        UIFactory.CreateText(card, IconFactory.GetAchievementCategory(achievement.Metric), UIFactory.CaptionSize,
+            unlocked ? UIFactory.GoldColor : UIFactory.MutedTextColor, TextAnchor.MiddleLeft,
+            new Vector2(0.17f, 0.7f), new Vector2(0.68f, 0.94f), FontStyle.Bold);
 
         UIFactory.CreateText(card, achievement.Name, UIFactory.BodySize, nameColor, TextAnchor.MiddleLeft,
-            new Vector2(0.17f, 0.5f), new Vector2(0.68f, 0.92f), FontStyle.Bold);
+            new Vector2(0.17f, 0.38f), new Vector2(0.68f, 0.72f), FontStyle.Bold);
 
-        UIFactory.CreateCaption(card, achievement.Description, new Vector2(0.17f, 0.08f), new Vector2(0.68f, 0.5f));
+        UIFactory.CreateCaption(card, achievement.Description, new Vector2(0.17f, 0.05f), new Vector2(0.68f, 0.4f));
 
         UIFactory.CreateText(card, status, UIFactory.CaptionSize, nameColor, TextAnchor.MiddleRight,
             new Vector2(0.68f, 0f), new Vector2(0.97f, 1f), FontStyle.Bold);

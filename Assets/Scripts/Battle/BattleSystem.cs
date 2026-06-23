@@ -4,7 +4,15 @@ using UnityEngine;
 
 public class BattleSystem
 {
-    const int StaminaRegenPerTurn = 8;
+    // Milestone 30, Part 4: lowered from 8. At 8/turn, every move costing 8 or
+    // less stamina (most of the roster) was free to spam forever - regen
+    // outpaced the cost. At 5/turn, only the cheapest jabs/pokes are fully
+    // sustainable; anything mid-tier or heavier drains over a few turns,
+    // which is what makes the new Recover action (below) actually matter.
+    const int StaminaRegenPerTurn = 5;
+    const int RecoverActionAmount = 18;
+    const int AiRecoverChancePercent = 60;
+    const int MaxComboTrackLength = 3;
 
     const int BleedDuration = 3;
     const int BleedDamagePerTurn = 4;
@@ -28,6 +36,11 @@ public class BattleSystem
 
     // Reused across AI turns to avoid allocating a fresh list every move choice.
     readonly List<MoveData> affordableMovesBuffer = new List<MoveData>();
+
+    // Milestone 30, Part 6: trailing window of the player's own recent move ids,
+    // used to detect hidden combos. Player-only by design - keeps the AI's
+    // existing move selection completely untouched.
+    readonly List<string> recentPlayerMoveIds = new List<string>();
 
     public BattleSystem(FighterData player, FighterData opponent)
     {
@@ -65,6 +78,47 @@ public class BattleSystem
         return result;
     }
 
+    // Milestone 30, Part 5: lets the player spend their turn recovering a much
+    // larger chunk of stamina than passive regen alone provides. Mirrors
+    // PlayerUseMove's turn-order structure exactly, just with no move chosen.
+    public BattleResult PlayerRecover(List<string> log)
+    {
+        bool playerActsFirst = RollsFirst(Player.Stats.Speed, Opponent.Stats.Speed);
+        log.Add(playerActsFirst ? $"{Player.Name} acts first this round." : $"{Opponent.Name} acts first this round.");
+
+        BattleResult result;
+        if (playerActsFirst)
+        {
+            result = RunPlayerRecoverTurn(log);
+            if (result != BattleResult.Ongoing) return result;
+            result = RunOpponentTurn(log);
+        }
+        else
+        {
+            result = RunOpponentTurn(log);
+            if (result != BattleResult.Ongoing) return result;
+            result = RunPlayerRecoverTurn(log);
+        }
+        return result;
+    }
+
+    BattleResult RunPlayerRecoverTurn(List<string> log)
+    {
+        if (TickEffects(Player, playerEffects, log)) return CheckResult();
+
+        if (TryConsumeStun(Player, playerEffects, log))
+        {
+            RecoverStamina(Player, log);
+            return CheckResult();
+        }
+
+        // Deliberately resting breaks an in-progress combo - same as not
+        // following through on the sequence.
+        recentPlayerMoveIds.Clear();
+        PerformRecover(Player, log);
+        return CheckResult();
+    }
+
     // Speed difference nudges who goes first, but never guarantees it.
     bool RollsFirst(int actorSpeed, int otherSpeed)
     {
@@ -94,7 +148,13 @@ public class BattleSystem
         else
         {
             Player.Stats.CurrentStamina -= move.StaminaCost;
-            ResolveMove(Player, Opponent, move, opponentEffects, log);
+
+            recentPlayerMoveIds.Add(move.Id);
+            if (recentPlayerMoveIds.Count > MaxComboTrackLength) recentPlayerMoveIds.RemoveAt(0);
+            var combo = ComboDatabase.TryMatch(recentPlayerMoveIds);
+            if (combo != null) recentPlayerMoveIds.Clear();
+
+            ResolveMove(Player, Opponent, move, opponentEffects, log, combo);
         }
 
         RecoverStamina(Player, log);
@@ -111,18 +171,23 @@ public class BattleSystem
             return CheckResult();
         }
 
-        var move = ChooseEnemyMove(Opponent);
+        // Milestone 30, Part 5: the AI can also choose to recover when low on
+        // stamina, instead of just sitting at low stamina behind passive regen.
+        float staminaRatio = (float)Opponent.Stats.CurrentStamina / Opponent.Stats.MaxStamina;
+        bool wantsToRecover = staminaRatio < AiLowStaminaRatioThreshold && rng.Next(0, 100) < AiRecoverChancePercent;
+
+        var move = wantsToRecover ? null : ChooseEnemyMove(Opponent);
         if (move == null)
         {
-            log.Add($"{Opponent.Name} is too exhausted to attack!");
+            PerformRecover(Opponent, log);
         }
         else
         {
             Opponent.Stats.CurrentStamina -= move.StaminaCost;
             ResolveMove(Opponent, Player, move, playerEffects, log);
+            RecoverStamina(Opponent, log);
         }
 
-        RecoverStamina(Opponent, log);
         return CheckResult();
     }
 
@@ -201,7 +266,8 @@ public class BattleSystem
         }
 
         int magnitude = GetMagnitude(type);
-        effects.Add(new ActiveStatusEffect { Type = type, RemainingTurns = GetDuration(type), Magnitude = magnitude });
+        var effect = new ActiveStatusEffect { Type = type, RemainingTurns = GetDuration(type), Magnitude = magnitude };
+        effects.Add(effect);
 
         switch (type)
         {
@@ -212,13 +278,21 @@ public class BattleSystem
                 log.Add($"{fighter.Name} is stunned!");
                 break;
             case StatusEffectType.DefenseDown:
-                fighter.Stats.Defense = Mathf.Max(1, fighter.Stats.Defense - magnitude);
+            {
+                int before = fighter.Stats.Defense;
+                fighter.Stats.Defense = Mathf.Max(1, before - magnitude);
+                effect.Magnitude = before - fighter.Stats.Defense;
                 log.Add($"{fighter.Name}'s defense drops!");
                 break;
+            }
             case StatusEffectType.SpeedDown:
-                fighter.Stats.Speed = Mathf.Max(1, fighter.Stats.Speed - magnitude);
+            {
+                int before = fighter.Stats.Speed;
+                fighter.Stats.Speed = Mathf.Max(1, before - magnitude);
+                effect.Magnitude = before - fighter.Stats.Speed;
                 log.Add($"{fighter.Name}'s speed drops!");
                 break;
+            }
         }
     }
 
@@ -245,7 +319,7 @@ public class BattleSystem
         }
     }
 
-    void ResolveMove(FighterData attacker, FighterData defender, MoveData move, List<ActiveStatusEffect> defenderEffects, List<string> log)
+    void ResolveMove(FighterData attacker, FighterData defender, MoveData move, List<ActiveStatusEffect> defenderEffects, List<string> log, ComboData combo = null)
     {
         int hitRoll = rng.Next(0, 100);
         if (hitRoll >= move.Accuracy)
@@ -259,6 +333,16 @@ public class BattleSystem
 
         bool crit = move.HasEffect(MoveEffect.CriticalHit) && rng.Next(0, 100) < move.EffectChance;
         if (crit) baseDamage *= 1.5f;
+
+        // Milestone 30, Part 6/7: the combo bonus only announces once the move
+        // is confirmed to land - the move's own name stays in the hit line
+        // below so BattleScreen's existing move-type lookup for hit animations
+        // keeps working unchanged.
+        if (combo != null)
+        {
+            baseDamage *= combo.DamageBonusMultiplier;
+            log.Add($"COMBO DISCOVERED! {combo.DisplaySequence} -> {combo.DisplayName}! Damage boosted!");
+        }
 
         int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage));
         defender.Stats.CurrentHealth = Mathf.Max(0, defender.Stats.CurrentHealth - damage);
@@ -318,6 +402,17 @@ public class BattleSystem
         int recovered = Mathf.Min(StaminaRegenPerTurn, fighter.Stats.MaxStamina - fighter.Stats.CurrentStamina);
         fighter.Stats.CurrentStamina += recovered;
         log.Add($"{fighter.Name} recovers {recovered} stamina.");
+    }
+
+    // Milestone 30, Part 5: the deliberate Recover action/AI choice - a much
+    // bigger one-time gain than passive regen, replacing it for that turn.
+    void PerformRecover(FighterData fighter, List<string> log)
+    {
+        int recovered = Mathf.Min(RecoverActionAmount, fighter.Stats.MaxStamina - fighter.Stats.CurrentStamina);
+        fighter.Stats.CurrentStamina += recovered;
+        log.Add(recovered > 0
+            ? $"{fighter.Name} catches their breath and recovers {recovered} stamina."
+            : $"{fighter.Name} is already at full stamina.");
     }
 
     BattleResult CheckResult()

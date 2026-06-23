@@ -1,5 +1,5 @@
-Calico Combat League - AI Art Readiness
-=========================================
+Calico Combat League - Art Generation Guide
+==============================================
 Goal: future artwork (hand-drawn or AI-generated) can be dropped into
 Assets/Resources/Art/... and Assets/Resources/Audio/... with ZERO code
 changes. Every lookup goes through Core/ArtRegistry.cs, which always
@@ -30,10 +30,14 @@ Two kinds of id:
                 "archetype_MuayThaiFighter.png"
   Player:       "player.png"
 
-Priority when rendering a fighter's portrait (Part 4 of Milestone 13):
+Priority when rendering a fighter's portrait:
   1. Exact per-fighter art (if it exists)
   2. Shared archetype art (if the per-fighter art doesn't exist)
-  3. Generated silhouette, tinted by discipline color (always works)
+  3. Cached archetype silhouette, tinted by discipline color (always works)
+
+The four generated fallback silhouettes have distinct Boxer, Wrestler, BJJ,
+and Muay Thai poses. Championship opponents use the generic fallback unless
+exact fighter art is supplied.
 
 Example AI prompt:
   "Stylized cartoon MMA fighter portrait, calico-cat-themed combat league,
@@ -42,12 +46,112 @@ Example AI prompt:
    game UI art style."
 
 --------------------------------------------------
+BATTLE FIGHTER SPRITES
+--------------------------------------------------
+Path:        Assets/Resources/Art/Fighters/Battle/{id}_{pose}.png
+Size:        1024x1536 px
+Aspect:      2:3 portrait
+Import:      Sprite (2D and UI), Single, no Mip Maps, alpha transparency,
+             Read/Write off, Max Size 2048.
+
+Poses:
+  idle       Neutral fighting stance used during the match
+  victory    Post-fight winner pose; also used for leaders and champions
+  defeat     Tired or seated/low stance without severe injury
+
+Naming examples:
+  player_idle.png
+  player_victory.png
+  player_defeat.png
+  boxing_leader_idle.png
+  boxing_leader_victory.png
+  archetype_Boxer_idle.png
+  archetype_Wrestler_victory.png
+  archetype_BjjSpecialist_defeat.png
+  archetype_MuayThaiFighter_idle.png
+
+Author every fighter facing screen-right. The opponent slot mirrors the sprite
+at runtime so both fighters face inward. Keep feet near the lower edge, leave
+roughly 8% transparent padding around the silhouette, and keep the full body
+inside the canvas.
+
+Battle sprite fallback order:
+  1. Exact fighter + requested pose
+  2. Archetype + requested pose
+  3. Exact fighter idle, then archetype idle
+  4. Exact fighter portrait, then archetype portrait
+  5. Generated archetype silhouette
+
+Static sprites are animated by lightweight transform motion: breathing, stance
+shifts, attacks, recoil, victory, and defeat. Sprite sheets are not required.
+
+--------------------------------------------------
+PLAYER AVATAR (world-traveling, outside of battle)
+--------------------------------------------------
+Path:        Assets/Resources/Art/Avatar/player.png
+Size:        768x768 px (square)
+Aspect:      1:1
+Import:      Sprite (2D and UI), no Mip Maps, alpha transparency.
+
+This is the fighter shown on the Main Menu (Hub), the Gym Map, and walking into
+a Gym Entry - it is intentionally a separate slot from the in-battle portrait/
+battle sprite, so a "casual clothes" or "walking around" look can be supplied
+without touching how the fighter looks mid-fight.
+
+--------------------------------------------------
+ARCHETYPE AVATARS (shared fallback per discipline)
+--------------------------------------------------
+Path:   Assets/Resources/Art/Avatar/archetype_{ArchetypeType}.png
+Size:   768x768 px (square)
+Aspect: 1:1
+Types:  archetype_Boxer.png, archetype_Wrestler.png,
+        archetype_BjjSpecialist.png, archetype_MuayThaiFighter.png
+
+Used when no exact player.png exists yet, so every archetype still looks
+distinct while traveling instead of falling straight to a flat silhouette.
+
+Avatar fallback order (Core/ArtRegistry.cs + UIFactory.SetPlayerAvatar):
+  1. Art/Avatar/player.png (exact player avatar)
+  2. Art/Avatar/archetype_{ArchetypeType}.png (shared archetype avatar)
+  3. The existing fighter-portrait chain (Art/Fighters/player.png, then
+     Art/Fighters/archetype_{ArchetypeType}.png)
+  4. Generated archetype silhouette, tinted by discipline color (always works)
+
+Optional walk-cycle art (UIFactory.SetPlayerAvatarWalk) swaps in only while the
+avatar is traveling (Gym Map, Gym Entry), using the same priority order:
+  Art/Avatar/player_walk.png -> Art/Avatar/archetype_{ArchetypeType}_walk.png
+  -> falls back to the idle avatar chain above if neither exists.
+
+Example AI prompt:
+  "Stylized cartoon MMA fighter, calico-cat-themed combat league, full body,
+   casual training outfit, [boxer / wrestler / muay thai fighter / bjj
+   specialist] build, square framing, transparent background, mobile game
+   world-map art style."
+
+--------------------------------------------------
+HUB ART / MAP ART / GYM ENTRANCE ART
+--------------------------------------------------
+These three presentation contexts (Milestone 17) deliberately reuse pipelines
+that already exist rather than adding new asset categories:
+
+  Hub (Main Menu, "Training HQ")  -> Art/Backgrounds/main_menu.png
+  Gym Map (travel screen)         -> Art/Backgrounds/gym_map.png
+  Gym Entrance (approach a gym)   -> Art/Gyms/{gymId}_banner.png and
+                                      Art/Backgrounds/{gymId}_background.png
+
+Any artist replacing those existing files automatically upgrades the Hub, Map,
+and Gym Entrance presentation too - only the avatar itself (above) needed a
+new, dedicated asset slot.
+
+--------------------------------------------------
 GYM BANNERS
 --------------------------------------------------
 Path:   Assets/Resources/Art/Gyms/{gymId}_banner.png
 Size:   1600x380 px
 Aspect: ~4.2:1 (wide letterbox)
 GymIds: boxing_gym, muaythai_gym, wrestling_gym, bjj_gym, championship_gym
+Import: Sprite (2D and UI), no Mip Maps. Keep important detail away from the
+        left crest and central text zones; the UI adds a readability tint.
 
 Example AI prompt:
   "Wide banner illustration of a [boxing / muay thai / wrestling / BJJ]
@@ -65,6 +169,8 @@ Known keys already wired into screens:
   main_menu                          - Main Menu screen
   gym_map                            - Gym Map screen
   battle                             - Battle screen
+  victory                            - Victory result screen
+  defeat                             - Defeat result screen
   championship                       - Championship screen
   {gymId}_background (e.g.
     boxing_gym_background)           - that gym's roster screen
@@ -93,9 +199,19 @@ Example AI prompts:
          center, transparent background, wide format."
 
 --------------------------------------------------
-ICONS (achievements, items, moves, gyms)
+GYM LOGOS / CRESTS
 --------------------------------------------------
 Path:   Assets/Resources/Art/Icons/{gymId}_icon.png
+Size:   256x256 px, square, transparent background
+Aspect: 1:1
+Import: Sprite (2D and UI), no Mip Maps
+
+Use a bold silhouette that remains readable at small size. Do not include
+fine text; the gym name is rendered separately by the UI.
+
+--------------------------------------------------
+ICONS (achievements, items, moves, gyms)
+--------------------------------------------------
 Path:   Assets/Resources/Art/Icons/achievement_{achievementId}.png
 Path:   Assets/Resources/Art/Icons/item_{itemId}.png
 Path:   Assets/Resources/Art/Icons/move_{moveId}.png
@@ -107,15 +223,39 @@ Data/AchievementDatabase.cs, Data/ItemDatabase.cs, Data/MoveDatabase.cs.
 
 Example AI prompt:
   "Small flat icon, [boxing glove / wrestling rings / submission lock /
-   trophy], single bold color on transparent background, simple mobile
-   game UI icon style, square."
+         trophy], single bold color on transparent background, simple mobile
+         game UI icon style, square."
+
+Achievement art is shown in full color when unlocked and muted when locked.
+Move fallback icons use discipline colors: orange for Boxing, green for
+Wrestling, blue for BJJ, amber for Muay Thai, and gold for Ground and Pound.
 
 --------------------------------------------------
-AUDIO (reference - see Assets/Resources/Audio/README.txt)
+UNITY IMPORT CHECKLIST
 --------------------------------------------------
-Path:   Assets/Resources/Audio/{name}.wav (or .mp3/.ogg)
-Names:  music, click, hit, critical_hit, victory, defeat, gym_cleared,
-        champion_victory
+- Texture Type: Sprite (2D and UI), Sprite Mode: Single.
+- Disable Generate Mip Maps for portraits, logos, banners, and UI icons.
+- Disable Generate Mip Maps for battle fighter sprites.
+- Use alpha transparency for portraits, logos, crests, and icons.
+- Use platform compression appropriate to Android/iOS; verify small text and
+  hard icon edges remain clean on a 1080x1920 reference device.
+- Keep Read/Write disabled. Runtime code never modifies imported textures.
+- Use consistent pixels per unit within each asset category.
+
+--------------------------------------------------
+SCREENSHOT PRIORITY
+--------------------------------------------------
+Highest-value first art targets are the league logo, player portrait,
+championship leader portrait, championship belt, championship background,
+boxing gym banner, one battle background, and the four archetype portraits.
+These cover the Main Menu, Gym, Battle, Profile, and Championship screenshots
+with the fewest source files.
+
+--------------------------------------------------
+OTHER PIPELINES
+--------------------------------------------------
+Audio has its own naming/import guide in Assets/Resources/Audio/README.txt and
+its creative brief in Assets/Docs/AudioStyleGuide.txt.
 
 --------------------------------------------------
 WHY THIS WORKS WITHOUT CODE CHANGES
@@ -125,3 +265,7 @@ Every one of the paths above is built from data already in the project
 Core/ArtRegistry.cs. Adding a new gym, item, move, or achievement later
 automatically gets its own art slot for free - no new lookup method is
 needed unless an entirely new CATEGORY of asset is introduced.
+
+ArtRegistry caches successful and missing Resources lookups. IconFactory
+caches generated sprites. Screens reuse these objects rather than creating
+duplicate textures or repeatedly loading the same asset.

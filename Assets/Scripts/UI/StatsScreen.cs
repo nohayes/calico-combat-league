@@ -13,16 +13,24 @@ public class StatsScreen : UIScreen
     readonly Text headerText;
     readonly Transform statsContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
+    readonly Image avatarImage;
+    readonly PlayerAvatarVisual avatarVisual;
 
-    public StatsScreen(Transform parent, GameManager gm) : base(parent, gm, "StatsScreen")
+    public StatsScreen(Transform parent, GameManager gm) : base(parent, gm, "StatsScreen", "gym_map")
     {
-        UIFactory.CreateHeading(Root.transform, "FIGHTER STATS", new Vector2(0.05f, 0.92f), new Vector2(0.95f, 0.99f));
+        UIFactory.CreateHeading(Root.transform, "FIGHTER STATS", new Vector2(0.05f, 0.92f), new Vector2(0.76f, 0.99f));
 
-        UIFactory.CreateCard(Root.transform, "Summary", new Vector2(0.05f, 0.78f), new Vector2(0.95f, 0.91f));
+        // Milestone 25, Part 4: small fighter-identity badge.
+        var avatarMarker = UIFactory.CreateAvatarMarker(Root.transform, "Player", new Vector2(0.79f, 0.92f), new Vector2(0.95f, 0.99f), out avatarImage);
+        avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
+
+        // Milestone 28: narrowed to a centered column (was edge-to-edge, a
+        // portrait-era width that reads as an empty stretched strip on 16:9).
+        UIFactory.CreateCard(Root.transform, "Summary", new Vector2(0.15f, 0.78f), new Vector2(0.85f, 0.91f));
         headerText = UIFactory.CreateText(Root.transform, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
-            new Vector2(0.08f, 0.78f), new Vector2(0.92f, 0.91f));
+            new Vector2(0.18f, 0.78f), new Vector2(0.82f, 0.91f));
 
-        statsContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.05f, 0.14f), new Vector2(0.95f, 0.76f));
+        statsContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.14f), new Vector2(0.85f, 0.76f));
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor);
@@ -42,6 +50,9 @@ public class StatsScreen : UIScreen
         var stats = GM.Player.Stats;
         headerText.text =
             $"Level {stats.Level}    XP: {stats.XP} / {stats.XPToNextLevel}\nCoins: {stats.Coins}    Stat Points: {stats.StatPoints}";
+
+        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
+        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
 
         for (int i = 0; i < AllStats.Length; i++)
         {

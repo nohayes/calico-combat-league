@@ -1,89 +1,125 @@
-using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
+// Home Screen: the player hub - logo, avatar, FIGHT (primary action), and three
+// secondary actions (Profile / Shop / Stats). Moves and Hall of Fame moved into
+// Profile (the management hub) to keep this screen's button group small. The
+// gym list itself lives on the dedicated GymSelectionScreen.
+// Landscape Conversion (Milestone 26): the tall avatar now fills the full-height
+// left column - "my fighter's gym" - with FIGHT and the secondary actions
+// organized in a column on the right, making full use of 16:9 width instead of
+// stacking everything vertically.
 public class GymMapScreen : UIScreen
 {
-    readonly Transform listContainer;
-    readonly List<GameObject> dynamicEntries = new List<GameObject>();
+    readonly RectTransform avatarFrame;
+    readonly Image avatarImage;
+    readonly PlayerAvatarVisual avatarVisual;
+    readonly RectTransform travelCard;
+    readonly Text travelText;
+    readonly Button fightButton;
+    readonly RivalDialogueBox rivalDialogue;
+    bool traveling;
+    bool travelSkipRequested;
+
+    // Tall portrait avatar art: marker fills its frame edge-to-edge (no inset)
+    // so the full vertical height of the sprite is available.
+    static readonly Vector2 AvatarRestMin = Vector2.zero;
+    static readonly Vector2 AvatarRestMax = Vector2.one;
 
     public GymMapScreen(Transform parent, GameManager gm) : base(parent, gm, "GymMapScreen", "gym_map")
     {
-        UIFactory.CreateBrandHeader(Root.transform, new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.99f));
+        UIFactory.CreateBrandHeader(Root.transform, new Vector2(0.30f, 0.86f), new Vector2(0.70f, 0.99f), 1.2f);
 
-        UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.05f, 0.78f), new Vector2(0.34f, 0.85f),
-            () => GM.ChangeState(GameState.MovesScreen), UIFactory.SecondaryColor);
+        avatarFrame = UIFactory.CreateCard(Root.transform, "HomeAvatar", new Vector2(0.04f, 0.06f), new Vector2(0.42f, 0.84f), Color.clear);
+        var marker = UIFactory.CreateAvatarMarker(avatarFrame, "Player", AvatarRestMin, AvatarRestMax, out avatarImage);
+        avatarVisual = marker.gameObject.AddComponent<PlayerAvatarVisual>();
 
-        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.36f, 0.78f), new Vector2(0.65f, 0.85f),
+        // Layout: FIGHT stays largest/primary up top. Milestone 30 adds STREET
+        // FIGHT just beneath it as a clearly secondary-but-prominent option (the
+        // grinding path, not the main one), with PROFILE / SHOP / STATS as one
+        // uniform row beneath both, the whole group centered in the right column.
+        fightButton = UIFactory.CreateButton(Root.transform, "FIGHT", new Vector2(0.50f, 0.60f), new Vector2(0.96f, 0.74f),
+            OnFightPressed, UIFactory.DangerColor);
+
+        UIFactory.CreateButton(Root.transform, "STREET FIGHT", new Vector2(0.50f, 0.44f), new Vector2(0.96f, 0.57f),
+            () => GM.ChangeState(GameState.StreetFight), UIFactory.AccentOrange);
+
+        UIFactory.CreateButton(Root.transform, "PROFILE", new Vector2(0.50f, 0.30f), new Vector2(0.64f, 0.41f),
+            () => GM.ChangeState(GameState.ProfileScreen), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "SHOP", new Vector2(0.66f, 0.30f), new Vector2(0.80f, 0.41f),
+            () => GM.ChangeState(GameState.ShopScreen), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.82f, 0.30f), new Vector2(0.96f, 0.41f),
             () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
 
-        UIFactory.CreateButton(Root.transform, "SHOP", new Vector2(0.67f, 0.78f), new Vector2(0.95f, 0.85f),
-            () => GM.ChangeState(GameState.ShopScreen), UIFactory.SecondaryColor);
+        travelCard = UIFactory.CreateCard(Root.transform, "TravelCard", new Vector2(0.25f, 0.35f), new Vector2(0.75f, 0.65f),
+            new Color(0.08f, 0.07f, 0.07f, 0.96f));
+        var travelSkip = travelCard.gameObject.AddComponent<Button>();
+        travelSkip.transition = Selectable.Transition.None;
+        travelSkip.targetGraphic = travelCard.GetComponent<Image>();
+        travelSkip.onClick.AddListener(() => travelSkipRequested = true);
+        travelText = UIFactory.CreateText(travelCard, "HEADING TO THE GYM DISTRICT...", UIFactory.BodySize, UIFactory.GoldColor,
+            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.55f), new Vector2(0.96f, 0.9f), FontStyle.Bold);
+        travelText.raycastTarget = false;
+        var travelHint = UIFactory.CreateCaption(travelCard, "(tap to skip)", new Vector2(0.04f, 0.12f), new Vector2(0.96f, 0.45f), TextAnchor.MiddleCenter);
+        travelHint.raycastTarget = false;
+        travelCard.gameObject.SetActive(false);
 
-        UIFactory.CreateButton(Root.transform, "PROFILE", new Vector2(0.05f, 0.705f), new Vector2(0.34f, 0.775f),
-            () => GM.ChangeState(GameState.ProfileScreen), UIFactory.SecondaryColor);
-
-        UIFactory.CreateButton(Root.transform, "ACHIEVEMENTS", new Vector2(0.36f, 0.705f), new Vector2(0.65f, 0.775f),
-            () => GM.ChangeState(GameState.AchievementsScreen), UIFactory.SecondaryColor);
-
-        UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.67f, 0.705f), new Vector2(0.95f, 0.775f),
-            () => GM.ChangeState(GameState.HallOfChampionsScreen), UIFactory.SecondaryColor);
-
-        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.08f, 0.05f), new Vector2(0.92f, 0.69f));
+        // Milestone 29, Part 2: the rival's one-time first-appearance greeting.
+        rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
     }
 
     public void Refresh()
     {
-        foreach (var entry in dynamicEntries) Object.Destroy(entry);
-        dynamicEntries.Clear();
+        avatarFrame.gameObject.SetActive(GM.Player != null);
+        traveling = false;
+        travelCard.gameObject.SetActive(false);
+        fightButton.interactable = true;
+        if (GM.Player == null) return;
 
-        var gyms = GymDatabase.AllGyms;
-        if (gyms == null || gyms.Count == 0)
-        {
-            Debug.LogWarning("GymMapScreen.Refresh: no gyms found in GymDatabase.");
-            return;
-        }
+        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
+        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
 
-        for (int i = 0; i < gyms.Count; i++)
+        if (!GM.HasSeenRivalIntro)
         {
-            BuildGymRow(gyms[i], i, gyms.Count);
+            GM.MarkRivalIntroSeen();
+            RunAnimation(ShowRivalIntroDelayed());
         }
     }
 
-    void BuildGymRow(GymInfo gym, int index, int totalGyms)
+    // A short beat after the screen's own enter transition finishes, rather
+    // than popping in instantly alongside it.
+    IEnumerator ShowRivalIntroDelayed()
     {
-        bool unlocked = GM.IsGymUnlocked(gym);
-        bool completed = GM.IsGymCompleted(gym);
-        string tagline = completed ? "Cleared" : (unlocked && !string.IsNullOrEmpty(gym.Motto) ? gym.Motto : (unlocked ? "Available" : "Locked"));
-        string label = $"{gym.GymName}\n{tagline}";
+        yield return new WaitForSecondsRealtime(0.4f);
+        rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.FirstAppearanceLines);
+    }
 
-        float slotHeight = 1f / totalGyms;
-        float padding = slotHeight * 0.14f;
-        float yMax = 1f - index * slotHeight - padding;
-        float yMin = 1f - (index + 1) * slotHeight + padding;
+    void OnFightPressed()
+    {
+        if (traveling || GM.Player == null) return;
+        traveling = true;
+        fightButton.interactable = false;
+        travelSkipRequested = false;
+        travelCard.gameObject.SetActive(true);
+        // Reusing the avatar's existing walk-in-place presentation (same sprite
+        // swap + step bounce used for real gym-to-gym travel) instead of any new
+        // animation system - it just targets the position it's already at.
+        avatarVisual.MoveToAnchor(AvatarRestMin, AvatarRestMax, 1.2f, null);
+        RunAnimation(TravelRoutine());
+    }
 
-        Color color = completed ? UIFactory.PositiveColor : (unlocked ? IconFactory.GetGymThemeColor(gym.GymType) : UIFactory.LockedColor);
-        var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.06f, yMin), new Vector2(0.94f, yMax),
-            () => GM.EnterGym(gym), color);
-        button.interactable = unlocked;
-        dynamicEntries.Add(button.gameObject);
+    IEnumerator TravelRoutine()
+    {
+        float t = 0f;
+        const float duration = 1.2f;
+        while (t < duration && !travelSkipRequested)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
 
-        // Make room for an icon on the left of the auto-generated label.
-        var labelText = button.GetComponentInChildren<Text>();
-        labelText.rectTransform.anchorMin = new Vector2(0.24f, 0f);
-        labelText.rectTransform.anchorMax = new Vector2(0.97f, 1f);
-        labelText.alignment = TextAnchor.MiddleLeft;
-
-        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        iconGo.transform.SetParent(button.transform, false);
-        var iconRt = iconGo.GetComponent<RectTransform>();
-        iconRt.anchorMin = new Vector2(0.04f, 0.18f);
-        iconRt.anchorMax = new Vector2(0.2f, 0.82f);
-        iconRt.offsetMin = Vector2.zero;
-        iconRt.offsetMax = Vector2.zero;
-        var iconImage = iconGo.GetComponent<Image>();
-        var realIcon = ArtRegistry.GetGymIcon(gym.GymId);
-        iconImage.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
-        iconImage.color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+        travelCard.gameObject.SetActive(false);
+        GM.ChangeState(GameState.GymSelection);
     }
 }

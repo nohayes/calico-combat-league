@@ -182,6 +182,18 @@ public static class UIFactory
         fillAreaGo.transform.SetParent(go.transform, false);
         SetStretch(fillAreaGo.GetComponent<RectTransform>());
 
+        var delayedGo = new GameObject("DelayedFill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        delayedGo.transform.SetParent(fillAreaGo.transform, false);
+        SetStretch(delayedGo.GetComponent<RectTransform>());
+        var delayedImage = delayedGo.GetComponent<Image>();
+        delayedImage.sprite = RoundedSprite;
+        delayedImage.type = Image.Type.Filled;
+        delayedImage.fillMethod = Image.FillMethod.Horizontal;
+        delayedImage.fillOrigin = 0;
+        delayedImage.fillAmount = 1f;
+        delayedImage.color = Color.Lerp(fillColor, CreamColor, 0.38f);
+        delayedImage.raycastTarget = false;
+
         var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         fillGo.transform.SetParent(fillAreaGo.transform, false);
         var fillRt = fillGo.GetComponent<RectTransform>();
@@ -199,7 +211,8 @@ public static class UIFactory
         slider.maxValue = 1f;
         slider.value = 1f;
         slider.interactable = false;
-        go.AddComponent<SmoothSlider>();
+        var smooth = go.AddComponent<SmoothSlider>();
+        smooth.Configure(fillImage, delayedImage, fillColor);
         return slider;
     }
 
@@ -260,11 +273,14 @@ public static class UIFactory
     // Code-generated "logo": a calico-patched championship medallion plus the league
     // wordmark, flanked by small glove accents. If a real logo is ever dropped into
     // Resources/Art/Logos/league_logo, it's used instead with no code changes.
-    public static RectTransform CreateBrandHeader(Transform parent, Vector2 anchorMin, Vector2 anchorMax)
+    public static RectTransform CreateBrandHeader(Transform parent, Vector2 anchorMin, Vector2 anchorMax, float scale = 1f)
     {
         var root = CreateContainer(parent, anchorMin, anchorMax);
+        // Font growth is capped well below the badge/glove growth so a large scale
+        // (e.g. a title-screen-sized logo) can't push the wordmark off-screen.
+        float fontScale = Mathf.Min(scale, 1.5f);
 
-        var realLogo = ArtRegistry.GetLogo();
+        var realLogo = ArtRegistry.GetBanner();
         if (realLogo != null)
         {
             var logoGo = new GameObject("Logo", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -287,7 +303,7 @@ public static class UIFactory
         var badgeRt = badgeGo.GetComponent<RectTransform>();
         badgeRt.anchorMin = new Vector2(0.5f, 0.64f);
         badgeRt.anchorMax = new Vector2(0.5f, 0.64f);
-        badgeRt.sizeDelta = new Vector2(104, 104);
+        badgeRt.sizeDelta = new Vector2(104, 104) * scale;
         var badgeImage = badgeGo.GetComponent<Image>();
         badgeImage.sprite = CircleSprite;
         badgeImage.color = GoldColor;
@@ -307,14 +323,14 @@ public static class UIFactory
         CreatePatch(innerGo.transform, new Vector2(0.66f, 0.34f), 0.42f, CreamColor);
         CreatePatch(innerGo.transform, new Vector2(0.40f, 0.28f), 0.34f, new Color(0.08f, 0.07f, 0.07f));
 
-        CreateText(root, "CALICO COMBAT LEAGUE", HeadingSize, GoldColor, TextAnchor.MiddleCenter,
+        CreateText(root, "CALICO COMBAT LEAGUE", Mathf.RoundToInt(HeadingSize * fontScale), GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0f, 0.18f), new Vector2(1f, 0.43f), FontStyle.Bold);
 
         // Small glove-like accents bracketing the wordmark for an MMA feel.
-        CreateGloveDot(root, new Vector2(0.07f, 0.235f), 26f);
-        CreateGloveDot(root, new Vector2(0.93f, 0.235f), 26f);
+        CreateGloveDot(root, new Vector2(0.07f, 0.235f), 26f * scale);
+        CreateGloveDot(root, new Vector2(0.93f, 0.235f), 26f * scale);
 
-        CreateText(root, "Become the Champion", SubheadingSize, CreamColor, TextAnchor.MiddleCenter,
+        CreateText(root, "Become the Champion", Mathf.RoundToInt(SubheadingSize * fontScale), CreamColor, TextAnchor.MiddleCenter,
             new Vector2(0f, 0f), new Vector2(1f, 0.18f));
 
         return root;
@@ -394,13 +410,236 @@ public static class UIFactory
             return;
         }
 
-        portraitImage.sprite = IconFactory.GetSilhouetteSprite();
+        portraitImage.sprite = IconFactory.GetFighterPlaceholderSprite(archetype);
         portraitImage.color = themeColor;
     }
 
     // Overload for opponents, who have no archetype - same priority chain minus that step.
     public static void SetFighterPortrait(Image portraitImage, string fighterId, Color themeColor) =>
         SetFighterPortrait(portraitImage, fighterId, ArchetypeType.Unspecified, themeColor);
+
+    // Milestone 17 avatar fallback chain: 1) dedicated player avatar art, 2) shared
+    // archetype avatar art, 3) the existing portrait chain (custom portrait ->
+    // archetype portrait -> generated silhouette). The world-traveling avatar never
+    // shows a broken image even with zero avatar-specific art supplied.
+    public static void SetPlayerAvatar(Image avatarImage, ArchetypeType archetype, Color themeColor)
+    {
+        var customAvatar = ArtRegistry.GetPlayerAvatar();
+        if (customAvatar != null)
+        {
+            avatarImage.sprite = customAvatar;
+            avatarImage.color = Color.white;
+            return;
+        }
+
+        var archetypeAvatar = ArtRegistry.GetArchetypeAvatar(archetype);
+        if (archetypeAvatar != null)
+        {
+            avatarImage.sprite = archetypeAvatar;
+            avatarImage.color = Color.white;
+            return;
+        }
+
+        SetFighterPortrait(avatarImage, "player", archetype, themeColor);
+    }
+
+    // Same chain as SetPlayerAvatar, but checks for a dedicated walk-cycle sprite
+    // first - used only while the avatar is traveling. Falls back to the regular
+    // avatar chain when no walk art exists, so it's safe to call unconditionally.
+    public static void SetPlayerAvatarWalk(Image avatarImage, ArchetypeType archetype, Color themeColor)
+    {
+        var customWalk = ArtRegistry.GetPlayerAvatarWalk();
+        if (customWalk != null)
+        {
+            avatarImage.sprite = customWalk;
+            avatarImage.color = Color.white;
+            return;
+        }
+
+        var archetypeWalk = ArtRegistry.GetArchetypeAvatarWalk(archetype);
+        if (archetypeWalk != null)
+        {
+            avatarImage.sprite = archetypeWalk;
+            avatarImage.color = Color.white;
+            return;
+        }
+
+        SetPlayerAvatar(avatarImage, archetype, themeColor);
+    }
+
+    public static void SetFighterBattleSprite(Image spriteImage, string fighterId, ArchetypeType archetype,
+        FighterSpritePose pose, Color themeColor)
+    {
+        // The player's battle presence always uses the same world-avatar pipeline as
+        // the Hub/Map/Gym Entry (player.png -> archetype avatar -> existing portrait
+        // chain -> placeholder), instead of pose-specific battle sprites. Opponents
+        // are unaffected - this only triggers for the literal "player" fighterId.
+        if (fighterId == "player")
+        {
+            SetPlayerAvatar(spriteImage, archetype, themeColor);
+            return;
+        }
+
+        var battleSprite = ArtRegistry.GetBattleSprite(fighterId, archetype, pose);
+        if (battleSprite != null)
+        {
+            spriteImage.sprite = battleSprite;
+            spriteImage.color = Color.white;
+            return;
+        }
+
+        var portrait = ArtRegistry.GetFighterPortrait(fighterId);
+        if (portrait == null) portrait = ArtRegistry.GetArchetypePortrait(archetype);
+        if (portrait != null)
+        {
+            spriteImage.sprite = portrait;
+            spriteImage.color = Color.white;
+            return;
+        }
+
+        spriteImage.sprite = IconFactory.GetFighterPlaceholderSprite(archetype);
+        spriteImage.color = themeColor;
+    }
+
+    public static RectTransform CreateBattleFighter(Transform parent, string fighterName, Vector2 anchorMin,
+        Vector2 anchorMax, out Image spriteImage)
+    {
+        var root = CreateContainer(parent, anchorMin, anchorMax);
+        root.gameObject.name = SanitizeName("Combatant_" + fighterName);
+
+        var shadowGo = new GameObject("Shadow", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        shadowGo.transform.SetParent(root, false);
+        var shadowRt = shadowGo.GetComponent<RectTransform>();
+        shadowRt.anchorMin = new Vector2(0.18f, 0.02f);
+        shadowRt.anchorMax = new Vector2(0.82f, 0.18f);
+        shadowRt.offsetMin = Vector2.zero;
+        shadowRt.offsetMax = Vector2.zero;
+        var shadow = shadowGo.GetComponent<Image>();
+        shadow.sprite = CircleSprite;
+        shadow.color = new Color(0f, 0f, 0f, 0.42f);
+        shadow.raycastTarget = false;
+
+        var spriteGo = new GameObject("FighterSprite", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        spriteGo.transform.SetParent(root, false);
+        var spriteRt = spriteGo.GetComponent<RectTransform>();
+        spriteRt.anchorMin = new Vector2(0.06f, 0.04f);
+        spriteRt.anchorMax = new Vector2(0.94f, 1f);
+        spriteRt.offsetMin = Vector2.zero;
+        spriteRt.offsetMax = Vector2.zero;
+        spriteImage = spriteGo.GetComponent<Image>();
+        spriteImage.preserveAspect = true;
+        spriteImage.raycastTarget = false;
+
+        return root;
+    }
+
+    // Small world-traveling avatar marker (Milestone 17) shared by the Hub, Gym Map,
+    // and Gym Entry presentation - a shadow plus a sprite image, the same split used
+    // by CreateBattleFighter so PlayerAvatarVisual can animate the sprite (idle/step
+    // bounce) independently from the root (anchor position).
+    public static RectTransform CreateAvatarMarker(Transform parent, string markerName, Vector2 anchorMin, Vector2 anchorMax,
+        out Image avatarImage)
+    {
+        var root = CreateContainer(parent, anchorMin, anchorMax);
+        root.gameObject.name = SanitizeName("Avatar_" + markerName);
+
+        var shadowGo = new GameObject("Shadow", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        shadowGo.transform.SetParent(root, false);
+        var shadowRt = shadowGo.GetComponent<RectTransform>();
+        shadowRt.anchorMin = new Vector2(0.24f, 0f);
+        shadowRt.anchorMax = new Vector2(0.76f, 0.07f);
+        shadowRt.offsetMin = Vector2.zero;
+        shadowRt.offsetMax = Vector2.zero;
+        var shadow = shadowGo.GetComponent<Image>();
+        shadow.sprite = CircleSprite;
+        shadow.color = new Color(0f, 0f, 0f, 0.38f);
+        shadow.raycastTarget = false;
+
+        // Minimal inset (Milestone: tall portrait avatar) - just enough to keep the
+        // sprite clear of the shadow ellipse at the feet. preserveAspect still
+        // guarantees no stretching regardless of how tight this box is.
+        var spriteGo = new GameObject("AvatarSprite", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        spriteGo.transform.SetParent(root, false);
+        var spriteRt = spriteGo.GetComponent<RectTransform>();
+        spriteRt.anchorMin = new Vector2(0.01f, 0.04f);
+        spriteRt.anchorMax = new Vector2(0.99f, 1f);
+        spriteRt.offsetMin = Vector2.zero;
+        spriteRt.offsetMax = Vector2.zero;
+        avatarImage = spriteGo.GetComponent<Image>();
+        avatarImage.preserveAspect = true;
+        avatarImage.raycastTarget = false;
+
+        return root;
+    }
+
+    // Milestone 29: rival dialogue popup. Reuses CreateCard/CreateText and the
+    // existing fighter-portrait pipeline (SetFighterPortrait) - click-to-advance
+    // only, matching the battle intro's bio/quote beats so lines can't be missed.
+    public static RivalDialogueBox CreateRivalDialogue(Transform parent)
+    {
+        var card = CreateCard(parent, "RivalDialogue", new Vector2(0.24f, 0.32f), new Vector2(0.76f, 0.68f),
+            new Color(0.07f, 0.06f, 0.06f, 0.97f));
+
+        var portraitGo = new GameObject("Portrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        portraitGo.transform.SetParent(card, false);
+        var portraitRt = portraitGo.GetComponent<RectTransform>();
+        portraitRt.anchorMin = new Vector2(0.04f, 0.1f);
+        portraitRt.anchorMax = new Vector2(0.27f, 0.9f);
+        portraitRt.offsetMin = Vector2.zero;
+        portraitRt.offsetMax = Vector2.zero;
+        var portraitImage = portraitGo.GetComponent<Image>();
+        portraitImage.preserveAspect = true;
+        portraitImage.raycastTarget = false;
+        Color rivalTheme = IconFactory.GetArchetypeThemeColor(RivalDatabase.PortraitArchetype);
+        SetFighterPortrait(portraitImage, RivalDatabase.PortraitId, RivalDatabase.PortraitArchetype, rivalTheme);
+
+        var nameText = CreateText(card, "", BodySize, GoldColor, TextAnchor.MiddleLeft,
+            new Vector2(0.31f, 0.66f), new Vector2(0.97f, 0.88f), FontStyle.Bold);
+        nameText.raycastTarget = false;
+
+        var lineText = CreateText(card, "", SubheadingSize, CreamColor, TextAnchor.MiddleLeft,
+            new Vector2(0.31f, 0.2f), new Vector2(0.97f, 0.66f), FontStyle.Italic);
+        lineText.raycastTarget = false;
+
+        var tapPrompt = CreateText(card, "TAP TO CONTINUE ▸", CaptionSize, MutedTextColor, TextAnchor.MiddleRight,
+            new Vector2(0.31f, 0.04f), new Vector2(0.97f, 0.16f), FontStyle.Italic);
+        tapPrompt.raycastTarget = false;
+        tapPrompt.gameObject.SetActive(false);
+
+        var group = card.gameObject.AddComponent<CanvasGroup>();
+
+        var box = card.gameObject.AddComponent<RivalDialogueBox>();
+        box.Initialize(nameText, lineText, tapPrompt, group, card);
+
+        var tapButton = card.gameObject.AddComponent<Button>();
+        tapButton.transition = Selectable.Transition.None;
+        tapButton.targetGraphic = card.GetComponent<Image>();
+        tapButton.onClick.AddListener(box.OnTapped);
+
+        card.gameObject.SetActive(false);
+        return box;
+    }
+
+    public static RectTransform CreateFighterThumbnail(Transform parent, string fighterId, ArchetypeType archetype,
+        Color themeColor, Vector2 anchorMin, Vector2 anchorMax)
+    {
+        var frame = CreateCard(parent, "PortraitThumbnail", anchorMin, anchorMax, BackgroundColor);
+        frame.GetComponent<Image>().raycastTarget = false;
+
+        var portraitGo = new GameObject("Portrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        portraitGo.transform.SetParent(frame, false);
+        var portraitRt = portraitGo.GetComponent<RectTransform>();
+        portraitRt.anchorMin = new Vector2(0.1f, 0.08f);
+        portraitRt.anchorMax = new Vector2(0.9f, 0.92f);
+        portraitRt.offsetMin = Vector2.zero;
+        portraitRt.offsetMax = Vector2.zero;
+
+        var portrait = portraitGo.GetComponent<Image>();
+        portrait.preserveAspect = true;
+        portrait.raycastTarget = false;
+        SetFighterPortrait(portrait, fighterId, archetype, themeColor);
+        return frame;
+    }
 
     // Adds a full-bleed background image behind everything else on a screen if
     // ArtRegistry has one for this key; otherwise the screen's flat panel color
@@ -423,6 +662,21 @@ public static class UIFactory
         var image = go.GetComponent<Image>();
         image.sprite = background;
         image.color = Color.white;
+        image.raycastTarget = false;
+        // Milestone 26: existing backgrounds are portrait (9:16); the frame is now
+        // landscape (16:9). preserveAspect shows the full image undistorted
+        // (pillarboxed) instead of stretching it, with zero changes needed once
+        // landscape-shaped (1920x1080) art replaces these - it will simply fill
+        // edge-to-edge with no visible letterbox at that point.
+        image.preserveAspect = true;
+
+        // Keeps foreground text readable when future artwork is bright or detailed.
+        var tintGo = new GameObject("ReadabilityTint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        tintGo.transform.SetParent(go.transform, false);
+        SetStretch(tintGo.GetComponent<RectTransform>());
+        var tint = tintGo.GetComponent<Image>();
+        tint.color = new Color(0.03f, 0.025f, 0.025f, 0.48f);
+        tint.raycastTarget = false;
     }
 
     // Small discipline icon pinned to a portrait frame's corner - reuses the same

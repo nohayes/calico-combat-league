@@ -3,6 +3,7 @@ public enum GameState
     MainMenu,
     FighterCreation,
     GymMap,
+    GymSelection,
     GymScreen,
     Battle,
     Victory,
@@ -13,5 +14,7 @@ public enum GameState
     Championship,
     AchievementsScreen,
     ProfileScreen,
-    HallOfChampionsScreen
+    HallOfChampionsScreen,
+    Settings,
+    StreetFight
 }

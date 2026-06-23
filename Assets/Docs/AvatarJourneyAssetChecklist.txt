@@ -1,0 +1,45 @@
+Avatar Journey - Asset Checklist (Hub / Map / Gym Entry)
+==========================================================
+Short, focused list for the 5 assets that matter most to the journey
+presentation. Drop any file at its exact path below - no code changes
+needed, the next screen refresh picks it up. Full pipeline details and
+AI prompts: Assets/Docs/AIArtReadiness.txt.
+
+1) HUB BACKGROUND
+   Path:   Assets/Resources/Art/Backgrounds/main_menu.png
+   Size:   1080x1920 px
+   Aspect: 9:16 (full-screen portrait)
+   Used by the Main Menu / Training Studio screen.
+
+2) PLAYER AVATAR - IDLE
+   Path:   Assets/Resources/Art/Avatar/player.png
+   Size:   768x768 px
+   Aspect: 1:1, transparent background
+   Shown standing still on the Hub and Gym Map. Archetype-shared fallback:
+   Assets/Resources/Art/Avatar/archetype_{ArchetypeType}.png (same size).
+
+3) PLAYER AVATAR - WALKING
+   Path:   Assets/Resources/Art/Avatar/player_walk.png
+   Size:   768x768 px
+   Aspect: 1:1, transparent background
+   Optional. Used only while the avatar is traveling on the Gym Map or
+   approaching a gym entrance; falls back to the idle avatar (above) if
+   absent. Archetype-shared fallback:
+   Assets/Resources/Art/Avatar/archetype_{ArchetypeType}_walk.png.
+
+4) MAP BACKGROUND
+   Path:   Assets/Resources/Art/Backgrounds/gym_map.png
+   Size:   1080x1920 px
+   Aspect: 9:16 (full-screen portrait)
+   Used by the Gym Map (travel) screen.
+
+5) GYM ENTRANCE BACKGROUNDS
+   Path:   Assets/Resources/Art/Backgrounds/{gymId}_background.png
+   Size:   1080x1920 px
+   Aspect: 9:16 (full-screen portrait)
+   GymIds: boxing_gym, muaythai_gym, wrestling_gym, bjj_gym, championship_gym
+   One per gym, shown behind the gym entry/roster screen.
+
+   Also relevant to gym entry (already documented, listed here for
+   completeness): the gym banner image,
+   Assets/Resources/Art/Gyms/{gymId}_banner.png, 1600x380 px, ~4.2:1.

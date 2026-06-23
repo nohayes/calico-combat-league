@@ -9,6 +9,8 @@ using UnityEngine.UI;
 public class ScreenTransitionRunner : MonoBehaviour
 {
     Coroutine enterRoutine;
+    Coroutine timeImpactRoutine;
+    float timeScaleBeforeImpact = 1f;
 
     public void PlayEnter(CanvasGroup group, RectTransform rect)
     {
@@ -45,6 +47,110 @@ public class ScreenTransitionRunner : MonoBehaviour
     public void SpawnConfetti(Transform container, int count = 16)
     {
         StartCoroutine(ConfettiRoutine(container, count));
+    }
+
+    public Coroutine Run(IEnumerator routine)
+    {
+        return routine != null ? StartCoroutine(routine) : null;
+    }
+
+    public void PlayTimeImpact(float scale = 0.3f, float realtimeDuration = 0.12f)
+    {
+        if (timeImpactRoutine != null)
+        {
+            StopCoroutine(timeImpactRoutine);
+            Time.timeScale = timeScaleBeforeImpact;
+        }
+        timeImpactRoutine = StartCoroutine(TimeImpactRoutine(scale, realtimeDuration));
+    }
+
+    IEnumerator TimeImpactRoutine(float scale, float realtimeDuration)
+    {
+        timeScaleBeforeImpact = Time.timeScale;
+        Time.timeScale = Mathf.Clamp(scale, 0.05f, 1f);
+        yield return new WaitForSecondsRealtime(realtimeDuration);
+        Time.timeScale = timeScaleBeforeImpact;
+        timeImpactRoutine = null;
+    }
+
+    public void PlayPulse(RectTransform target, float peakScale = 1.08f, float duration = 0.45f)
+    {
+        if (target != null) StartCoroutine(PulseRoutine(target, peakScale, duration));
+    }
+
+    IEnumerator PulseRoutine(RectTransform target, float peakScale, float duration)
+    {
+        Vector3 startScale = target.localScale;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (target == null) yield break;
+            elapsed += Time.unscaledDeltaTime;
+            float p = Mathf.Clamp01(elapsed / duration);
+            float wave = Mathf.Sin(p * Mathf.PI);
+            target.localScale = Vector3.Lerp(startScale, startScale * peakScale, wave);
+            yield return null;
+        }
+        if (target != null) target.localScale = startScale;
+    }
+
+    public void PlayReveal(CanvasGroup group, RectTransform target, float delay = 0.2f, float duration = 0.35f)
+    {
+        if (group != null && target != null) StartCoroutine(RevealRoutine(group, target, delay, duration));
+    }
+
+    IEnumerator RevealRoutine(CanvasGroup group, RectTransform target, float delay, float duration)
+    {
+        Vector3 finalScale = Vector3.one;
+        group.alpha = 0f;
+        target.localScale = Vector3.one * 0.92f;
+        if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float p = Mathf.Clamp01(elapsed / duration);
+            float eased = 1f - (1f - p) * (1f - p);
+            group.alpha = eased;
+            target.localScale = Vector3.Lerp(Vector3.one * 0.92f, finalScale, eased);
+            yield return null;
+        }
+        group.alpha = 1f;
+        target.localScale = finalScale;
+    }
+
+    public void PlayExhausted(RectTransform target)
+    {
+        if (target != null) StartCoroutine(ExhaustedRoutine(target));
+    }
+
+    IEnumerator ExhaustedRoutine(RectTransform target)
+    {
+        Vector2 startPosition = target.anchoredPosition;
+        Quaternion startRotation = target.localRotation;
+        float elapsed = 0f;
+        const float duration = 0.55f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float p = Mathf.Clamp01(elapsed / duration);
+            float settle = 1f - Mathf.Pow(1f - p, 3f);
+            target.anchoredPosition = startPosition + new Vector2(0f, Mathf.Sin(p * Mathf.PI) * -14f);
+            target.localRotation = Quaternion.Lerp(startRotation, Quaternion.Euler(0f, 0f, -3f), settle);
+            yield return null;
+        }
+        target.anchoredPosition = startPosition;
+        target.localRotation = startRotation;
+    }
+
+    void OnDisable()
+    {
+        if (timeImpactRoutine != null)
+        {
+            Time.timeScale = timeScaleBeforeImpact;
+            timeImpactRoutine = null;
+        }
     }
 
     IEnumerator ConfettiRoutine(Transform container, int count)
