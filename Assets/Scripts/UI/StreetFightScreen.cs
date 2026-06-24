@@ -45,8 +45,10 @@ public class StreetFightScreen : UIScreen
         worldPresenceText = UIFactory.CreateCaption(Root.transform, "",
             new Vector2(0.15f, 0.18f), new Vector2(0.85f, 0.24f), TextAnchor.MiddleCenter);
 
+        // Milestone 48A: was DangerColor (red) - this is the primary action on
+        // this screen, not a negative outcome. Orange = action.
         UIFactory.CreateButton(Root.transform, "START FIGHT", new Vector2(0.42f, 0.10f), new Vector2(0.85f, 0.165f),
-            OnStartFight, UIFactory.DangerColor);
+            OnStartFight, UIFactory.AccentOrange);
         UIFactory.CreateButton(Root.transform, "FIND ANOTHER OPPONENT", new Vector2(0.15f, 0.10f), new Vector2(0.40f, 0.165f),
             OnReroll, UIFactory.SecondaryColor);
 

@@ -72,7 +72,7 @@ public class CareerScreen : UIScreen
 
     static Text CreateSectionTitle(Transform parent, string content, Vector2 anchorMin, Vector2 anchorMax)
     {
-        // Part 7: section titles use ProtestGuerrilla-Regular - the only
+        // Part 7: section titles use AbolitionTest-Rough - the only
         // existing constant mapped to that font is ButtonTextSize, which is
         // too small for a section header here, so the font is set explicitly
         // after creation (same override pattern used elsewhere in this UI).
@@ -206,9 +206,13 @@ public class CareerScreen : UIScreen
         bool isCurrent = GM.PrestigeLevel == level;
         Sprite sprite = ArtRegistry.GetPrestigeTattoo(level);
 
-        Color cardColor = isCurrent ? new Color(0.55f, 0.42f, 0.08f, 1f)
+        // Milestone 48A: derived from the unified theme instead of separately
+        // hand-picked browns - Gold for the current (most important) level,
+        // a darkened Bronze for locked (consistent with AchievementsScreen's
+        // locked-row treatment), plain Background for unlocked-but-not-current.
+        Color cardColor = isCurrent ? new Color(UIFactory.GoldColor.r * 0.5f, UIFactory.GoldColor.g * 0.5f, UIFactory.GoldColor.b * 0.5f, 1f)
             : unlocked ? UIFactory.BackgroundColor
-            : new Color(0.07f, 0.07f, 0.07f, 0.85f);
+            : new Color(UIFactory.LockedColor.r * 0.35f, UIFactory.LockedColor.g * 0.35f, UIFactory.LockedColor.b * 0.35f, 0.85f);
 
         var card = UIFactory.CreateCard(tattooGrid, $"Tattoo_{level}", anchorMin, anchorMax, cardColor);
         dynamicEntries.Add(card.gameObject);
@@ -240,7 +244,10 @@ public class CareerScreen : UIScreen
         string statusLine = isCurrent ? "CURRENT" : unlocked ? "" : "LOCKED";
         if (!string.IsNullOrEmpty(statusLine))
         {
-            var status = UIFactory.CreateText(card, statusLine, UIFactory.CaptionSize, isCurrent ? UIFactory.GoldColor : UIFactory.MutedTextColor,
+            // Milestone 48A: "LOCKED" now uses the unified Locked Bronze
+            // (was MutedTextColor) to match GymScreen/GymSelectionScreen's
+            // locked-state labels.
+            var status = UIFactory.CreateText(card, statusLine, UIFactory.CaptionSize, isCurrent ? UIFactory.GoldColor : UIFactory.LockedColor,
                 TextAnchor.MiddleCenter, new Vector2(0.02f, 0.02f), new Vector2(0.98f, 0.18f));
             status.resizeTextForBestFit = true;
             status.resizeTextMinSize = 8;

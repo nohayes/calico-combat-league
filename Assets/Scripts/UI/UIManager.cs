@@ -72,8 +72,9 @@ public class UIManager : MonoBehaviour
         iconRt.offsetMin = Vector2.zero;
         iconRt.offsetMax = Vector2.zero;
         var icon = iconGo.GetComponent<Image>();
-        icon.sprite = IconFactory.GetShapeSprite(IconShape.Circle);
-        icon.color = new Color(1f, 1f, 1f, 0.55f);
+        var audioIcon = ArtRegistry.GetAudioIcon();
+        icon.sprite = audioIcon != null ? audioIcon : IconFactory.GetShapeSprite(IconShape.Circle);
+        icon.color = audioIcon != null ? new Color(1f, 1f, 1f, 0.72f) : new Color(1f, 1f, 1f, 0.55f);
         icon.preserveAspect = true;
         icon.raycastTarget = false;
     }

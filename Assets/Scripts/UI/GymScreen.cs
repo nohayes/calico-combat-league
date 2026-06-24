@@ -66,8 +66,12 @@ public class GymScreen : UIScreen
         var slot = UIFactory.CreateContainer(fighterRow, new Vector2(xMin, 0f), new Vector2(xMax, 1f));
         dynamicEntries.Add(slot.gameObject);
 
-        // Nameplate: black border (slightly larger black rect behind) + white
-        // plate + black text, centered above the fighter.
+        // Nameplate: a high-contrast "name tag" card above the fighter -
+        // Milestone 48A: the original was a stark black/white plate sitting
+        // completely outside the game's dark gold/cream palette; recolored to
+        // a Secondary-bordered, Cream-filled plate so it still reads as a
+        // bold name tag without breaking visual cohesion with every other
+        // screen's warm tones.
         var borderGo = new GameObject("NameplateBorder", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         borderGo.transform.SetParent(slot, false);
         var borderRt = borderGo.GetComponent<RectTransform>();
@@ -75,7 +79,7 @@ public class GymScreen : UIScreen
         borderRt.anchorMax = new Vector2(0.94f, 1f);
         borderRt.offsetMin = Vector2.zero;
         borderRt.offsetMax = Vector2.zero;
-        borderGo.GetComponent<Image>().color = Color.black;
+        borderGo.GetComponent<Image>().color = UIFactory.SecondaryColor;
 
         var plateGo = new GameObject("Nameplate", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         plateGo.transform.SetParent(borderGo.transform, false);
@@ -84,9 +88,9 @@ public class GymScreen : UIScreen
         plateRt.anchorMax = Vector2.one;
         plateRt.offsetMin = new Vector2(3f, 3f);
         plateRt.offsetMax = new Vector2(-3f, -3f);
-        plateGo.GetComponent<Image>().color = Color.white;
+        plateGo.GetComponent<Image>().color = UIFactory.CreamColor;
 
-        var nameText = UIFactory.CreateText(plateGo.transform, opponent.Name, UIFactory.CaptionSize, Color.black,
+        var nameText = UIFactory.CreateText(plateGo.transform, opponent.Name, UIFactory.CaptionSize, UIFactory.BackgroundColor,
             TextAnchor.MiddleCenter, Vector2.zero, Vector2.one, FontStyle.Bold);
         nameText.resizeTextForBestFit = true;
         nameText.resizeTextMinSize = 10;

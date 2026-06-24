@@ -166,7 +166,9 @@ public class GymSelectionScreen : UIScreen
         else
         {
             tagline = "Locked";
-            taglineColor = UIFactory.DangerColor;
+            // Milestone 48A: was DangerColor (red) - a locked gym isn't a
+            // negative outcome, just unavailable yet. Locked = Bronze.
+            taglineColor = UIFactory.LockedColor;
             accentColor = UIFactory.LockedColor;
             badgeText = "LOCKED";
         }
@@ -220,7 +222,7 @@ public class GymSelectionScreen : UIScreen
         dynamicEntries.Add(border.gameObject);
 
         var fill = UIFactory.CreateCard(border.transform, name + "Fill", new Vector2(0.025f, 0.035f), new Vector2(0.975f, 0.965f),
-            new Color(0.07f, 0.06f, 0.06f, 0.97f));
+            new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.97f));
         fill.GetComponent<Image>().raycastTarget = false;
 
         var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -250,7 +252,7 @@ public class GymSelectionScreen : UIScreen
                 new Vector2(0.07f, 0.5f), new Vector2(0.95f, 0.62f), FontStyle.Bold);
             taglineText.raycastTarget = false;
             // Quick Fix (Font Replacement Pass), Part 5: mottos/taglines are
-            // short but PatrickHandSC-Regular's wider glyphs can still push a
+            // short but AtkinsonHyperlegible-Bold's glyphs can still push a
             // longer one (e.g. a gym motto) past this single-line band.
             taglineText.resizeTextForBestFit = true;
             taglineText.resizeTextMinSize = 12;

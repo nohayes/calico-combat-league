@@ -46,7 +46,14 @@ public class AchievementsScreen : UIScreen
         float yMin = 1f - (index + 1) * slotHeight + padding;
 
         bool unlocked = GM.IsAchievementUnlocked(achievement.Id);
-        Color cardColor = unlocked ? new Color(0.16f, 0.32f, 0.18f, 1f) : UIFactory.LockedColor;
+        // Milestone 48A: darkened tints of the unified PositiveColor/
+        // LockedColor (was a separately hand-picked green, and a now much
+        // brighter Bronze that's too vivid for a full-row card fill at full
+        // opacity) - both rows keep the same dark visual weight, with hue
+        // alone signaling unlocked (green) vs locked (bronze).
+        Color cardColor = unlocked
+            ? new Color(UIFactory.PositiveColor.r * 0.35f, UIFactory.PositiveColor.g * 0.35f, UIFactory.PositiveColor.b * 0.35f, 1f)
+            : new Color(UIFactory.LockedColor.r * 0.35f, UIFactory.LockedColor.g * 0.35f, UIFactory.LockedColor.b * 0.35f, 1f);
 
         var card = UIFactory.CreateCard(listContainer, $"Ach_{achievement.Id}", new Vector2(0f, yMin), new Vector2(1f, yMax), cardColor);
         dynamicEntries.Add(card.gameObject);
@@ -74,7 +81,7 @@ public class AchievementsScreen : UIScreen
             new Vector2(0.17f, 0.7f), new Vector2(0.68f, 0.94f), FontStyle.Bold);
 
         // Font System Overhaul, Part 3: explicit override - achievement names
-        // are called out specifically for the UI font (ProtestGuerrilla-Regular
+        // are called out specifically for the UI font (AbolitionTest-Rough
         // as of the Font Replacement Pass), but this row's BodySize (tuned for
         // the row's height) maps to the dialogue font by default.
         var nameText = UIFactory.CreateText(card, achievement.Name, UIFactory.BodySize, nameColor, TextAnchor.MiddleLeft,

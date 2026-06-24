@@ -68,8 +68,8 @@ public class ShopScreen : UIScreen
         var label = UIFactory.CreateText(card, $"{item.Name}  (owned: {owned})\n{item.Description}", UIFactory.CaptionSize,
             UIFactory.CreamColor, TextAnchor.MiddleLeft, new Vector2(0.17f, 0f), new Vector2(0.6f, 1f));
         // Quick Fix (Font Replacement Pass), Part 5: two fixed lines (name+owned,
-        // description) in a single list-row's height - PatrickHandSC-Regular's
-        // wider glyphs raise the odds of the description wrapping further than
+        // description) in a single list-row's height - AtkinsonHyperlegible-Bold's
+        // glyphs raise the odds of the description wrapping further than
         // this row allows.
         label.resizeTextForBestFit = true;
         label.resizeTextMinSize = 10;

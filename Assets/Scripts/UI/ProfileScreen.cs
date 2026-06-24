@@ -34,8 +34,8 @@ public class ProfileScreen : UIScreen
         flavorQuoteText = UIFactory.CreateText(Root.transform, "", UIFactory.CaptionSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.06f, 0.68f), new Vector2(0.94f, 0.73f), FontStyle.Italic);
         // Quick Fix (Font Replacement Pass), Part 5: archetype flavor quotes
-        // sit in a very short single-line band - PatrickHandSC-Regular's
-        // wider glyphs raise the odds of wrapping past this box's height.
+        // sit in a very short single-line band - AtkinsonHyperlegible-Bold's glyphs
+        // raise the odds of wrapping past this box's height.
         flavorQuoteText.resizeTextForBestFit = true;
         flavorQuoteText.resizeTextMinSize = 10;
         flavorQuoteText.resizeTextMaxSize = UIFactory.CaptionSize;
@@ -62,8 +62,12 @@ public class ProfileScreen : UIScreen
             () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
         UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.19f, 0.03f), new Vector2(0.332f, 0.13f),
             () => GM.ChangeState(GameState.MovesScreen), UIFactory.SecondaryColor);
+        // Milestone 48A: was DangerColor (red) - opening the confirm panel
+        // isn't itself destructive, just an action. The CONFIRM button inside
+        // the panel below (the actual irreversible reset) intentionally keeps
+        // DangerColor as a genuine warning. Orange = action, Red = negative.
         prestigeButton = UIFactory.CreateButton(Root.transform, "PRESTIGE", new Vector2(0.35f, 0.03f), new Vector2(0.492f, 0.13f),
-            () => ShowPrestigeConfirm(), UIFactory.DangerColor);
+            () => ShowPrestigeConfirm(), UIFactory.AccentOrange);
         UIFactory.CreateButton(Root.transform, "CAREER", new Vector2(0.51f, 0.03f), new Vector2(0.652f, 0.13f),
             () => GM.ChangeState(GameState.CareerScreen), UIFactory.SecondaryColor);
         UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.67f, 0.03f), new Vector2(0.812f, 0.13f),

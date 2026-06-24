@@ -12,55 +12,26 @@ using UnityEngine.UI;
 // stacking everything vertically.
 public class GymMapScreen : UIScreen
 {
-    readonly RectTransform avatarFrame;
     readonly Image avatarImage;
     readonly PlayerAvatarVisual avatarVisual;
-    readonly RectTransform travelCard;
-    readonly Text travelText;
-    readonly Button fightButton;
     readonly RivalDialogueBox rivalDialogue;
-    bool traveling;
-    bool travelSkipRequested;
 
-    // Tall portrait avatar art: marker fills its frame edge-to-edge (no inset)
-    // so the full vertical height of the sprite is available.
-    static readonly Vector2 AvatarRestMin = Vector2.zero;
-    static readonly Vector2 AvatarRestMax = Vector2.one;
-
-    public GymMapScreen(Transform parent, GameManager gm) : base(parent, gm, "GymMapScreen", "gym_map")
+    public GymMapScreen(Transform parent, GameManager gm) : base(parent, gm, "GymMapScreen")
     {
-        UIFactory.CreateBrandHeader(Root.transform, new Vector2(0.30f, 0.86f), new Vector2(0.70f, 0.99f), 1.2f);
+        UIFactory.ApplyScreenBackground(Root, "gym_map_new", addReadabilityTint: false);
 
-        avatarFrame = UIFactory.CreateCard(Root.transform, "HomeAvatar", new Vector2(0.04f, 0.06f), new Vector2(0.42f, 0.84f), Color.clear);
-        var marker = UIFactory.CreateAvatarMarker(avatarFrame, "Player", AvatarRestMin, AvatarRestMax, out avatarImage);
+        var marker = UIFactory.CreateAvatarMarker(Root.transform, "Player",
+            new Vector2(0.055f, 0.02f), new Vector2(0.43f, 0.72f), out avatarImage);
         avatarVisual = marker.gameObject.AddComponent<PlayerAvatarVisual>();
 
-        // Clean 1+3 layout: FIGHT stays largest/primary up top, with PROFILE /
-        // SHOP / STATS as one uniform row beneath it, the whole group centered
-        // a little lower in the right column. (Milestone 30: Street Fight moved
-        // to the Gym Selection screen, alongside the gyms it trains you for.)
-        fightButton = UIFactory.CreateButton(Root.transform, "FIGHT", new Vector2(0.50f, 0.56f), new Vector2(0.96f, 0.74f),
-            OnFightPressed, UIFactory.DangerColor);
-
-        UIFactory.CreateButton(Root.transform, "PROFILE", new Vector2(0.50f, 0.36f), new Vector2(0.64f, 0.48f),
-            () => GM.ChangeState(GameState.ProfileScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "SHOP", new Vector2(0.66f, 0.36f), new Vector2(0.80f, 0.48f),
-            () => GM.ChangeState(GameState.ShopScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.82f, 0.36f), new Vector2(0.96f, 0.48f),
-            () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
-
-        travelCard = UIFactory.CreateCard(Root.transform, "TravelCard", new Vector2(0.25f, 0.35f), new Vector2(0.75f, 0.65f),
-            new Color(0.08f, 0.07f, 0.07f, 0.96f));
-        var travelSkip = travelCard.gameObject.AddComponent<Button>();
-        travelSkip.transition = Selectable.Transition.None;
-        travelSkip.targetGraphic = travelCard.GetComponent<Image>();
-        travelSkip.onClick.AddListener(() => travelSkipRequested = true);
-        travelText = UIFactory.CreateText(travelCard, "HEADING TO THE GYM DISTRICT...", UIFactory.BodySize, UIFactory.GoldColor,
-            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.55f), new Vector2(0.96f, 0.9f), FontStyle.Bold);
-        travelText.raycastTarget = false;
-        var travelHint = UIFactory.CreateCaption(travelCard, "(tap to skip)", new Vector2(0.04f, 0.12f), new Vector2(0.96f, 0.45f), TextAnchor.MiddleCenter);
-        travelHint.raycastTarget = false;
-        travelCard.gameObject.SetActive(false);
+        CreateMapHitArea("FIGHT", new Vector2(0.565f, 0.225f), new Vector2(0.93f, 0.35f),
+            () => GM.ChangeState(GameState.GymSelection));
+        CreateMapHitArea("PROFILE", new Vector2(0.555f, 0.09f), new Vector2(0.675f, 0.22f),
+            () => GM.ChangeState(GameState.ProfileScreen), markerBelow: true);
+        CreateMapHitArea("SHOP", new Vector2(0.685f, 0.09f), new Vector2(0.805f, 0.22f),
+            () => GM.ChangeState(GameState.ShopScreen), markerBelow: true);
+        CreateMapHitArea("STATS", new Vector2(0.81f, 0.09f), new Vector2(0.935f, 0.22f),
+            () => GM.ChangeState(GameState.StatsScreen), markerBelow: true);
 
         // Milestone 29, Part 2: the rival's one-time first-appearance greeting.
         rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
@@ -68,10 +39,7 @@ public class GymMapScreen : UIScreen
 
     public void Refresh()
     {
-        avatarFrame.gameObject.SetActive(GM.Player != null);
-        traveling = false;
-        travelCard.gameObject.SetActive(false);
-        fightButton.interactable = true;
+        avatarImage.transform.parent.gameObject.SetActive(GM.Player != null);
         if (GM.Player == null) return;
 
         Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
@@ -92,31 +60,45 @@ public class GymMapScreen : UIScreen
         rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.FirstAppearanceLines);
     }
 
-    void OnFightPressed()
+    Button CreateMapHitArea(string name, Vector2 anchorMin, Vector2 anchorMax, UnityEngine.Events.UnityAction onClick,
+        bool markerBelow = false)
     {
-        if (traveling || GM.Player == null) return;
-        traveling = true;
-        fightButton.interactable = false;
-        travelSkipRequested = false;
-        travelCard.gameObject.SetActive(true);
-        // Reusing the avatar's existing walk-in-place presentation (same sprite
-        // swap + step bounce used for real gym-to-gym travel) instead of any new
-        // animation system - it just targets the position it's already at.
-        avatarVisual.MoveToAnchor(AvatarRestMin, AvatarRestMax, 1.2f, null);
-        RunAnimation(TravelRoutine());
-    }
+        var go = new GameObject("MapHitArea_" + name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        go.transform.SetParent(Root.transform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
 
-    IEnumerator TravelRoutine()
-    {
-        float t = 0f;
-        const float duration = 1.2f;
-        while (t < duration && !travelSkipRequested)
+        var image = go.GetComponent<Image>();
+        image.color = Color.clear;
+
+        var markerGo = new GameObject("GoldPointer", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        markerGo.transform.SetParent(go.transform, false);
+        var markerRt = markerGo.GetComponent<RectTransform>();
+        markerRt.anchorMin = markerBelow ? new Vector2(0.40f, -0.30f) : new Vector2(-0.10f, 0.38f);
+        markerRt.anchorMax = markerBelow ? new Vector2(0.60f, -0.08f) : new Vector2(-0.035f, 0.62f);
+        markerRt.offsetMin = Vector2.zero;
+        markerRt.offsetMax = Vector2.zero;
+        markerRt.localRotation = markerBelow ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.Euler(0f, 0f, 90f);
+        var markerImage = markerGo.GetComponent<Image>();
+        markerImage.sprite = IconFactory.GetShapeSprite(IconShape.Triangle);
+        markerImage.color = UIFactory.GoldColor;
+        markerImage.raycastTarget = false;
+        markerGo.SetActive(false);
+
+        var button = go.GetComponent<Button>();
+        button.transition = Selectable.Transition.None;
+        button.targetGraphic = image;
+        button.onClick.AddListener(() =>
         {
-            t += Time.unscaledDeltaTime;
-            yield return null;
-        }
+            AudioManager.Instance?.PlayClick();
+            onClick?.Invoke();
+        });
 
-        travelCard.gameObject.SetActive(false);
-        GM.ChangeState(GameState.GymSelection);
+        var feedback = go.AddComponent<TitleButtonFeedback>();
+        feedback.Initialize(button, markerImage);
+        return button;
     }
 }

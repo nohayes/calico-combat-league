@@ -126,6 +126,8 @@ public static class ArtRegistry
     public static Sprite GetAchievementIcon(string achievementId) =>
         Load(string.IsNullOrEmpty(achievementId) ? null : $"Art/Icons/achievement_{achievementId}");
 
+    public static Sprite GetAudioIcon() => Load("Art/Icons/audio");
+
     public static Sprite GetItemIcon(string itemId) =>
         Load(string.IsNullOrEmpty(itemId) ? null : $"Art/Icons/item_{itemId}");
 

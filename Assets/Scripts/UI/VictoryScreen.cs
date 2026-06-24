@@ -30,7 +30,7 @@ public class VictoryScreen : UIScreen
             new Vector2(0.42f, 0.58f), new Vector2(0.97f, 0.68f), FontStyle.Bold);
         // Quick Fix (Font Replacement Pass), Part 5: this box can accumulate
         // several appended lines (gym-cleared/unlock callouts plus the
-        // opponent's parting quote), and PatrickHandSC-Regular's wider glyphs
+        // opponent's parting quote), and AtkinsonHyperlegible-Bold's glyphs
         // raise the odds of overflowing this fairly tight box.
         highlightText.resizeTextForBestFit = true;
         highlightText.resizeTextMinSize = 14;

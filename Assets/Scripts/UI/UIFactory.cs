@@ -31,17 +31,18 @@ public static class UIFactory
     // null-safe Resources.Load pattern ArtRegistry/AudioManager already use -
     // a missing font file just means CreateText below falls back to
     // BuiltinFont, never a null reference (Part 10).
-    // Quick Fix (Font Replacement Pass): Poppin-Regular -> PatrickHandSC-Regular
-    // and Super Jumbo -> ProtestGuerrilla-Regular. Both DialogueFont and UiFont
+    // Quick Fix (Font Replacement Pass): dialogue/reading text now uses
+    // AtkinsonHyperlegible-Bold, and UI/button text uses AbolitionTest-Rough.
+    // Both DialogueFont and UiFont
     // are the single chokepoint every screen already flows through (via
     // GetFontForSize below, plus the handful of explicit .font = DialogueFont/
     // UiFont overrides elsewhere), so swapping the two Resources.Load paths
     // here is the entire replacement - no per-screen changes needed.
     static Font dialogueFont;
-    public static Font DialogueFont => dialogueFont ??= (Resources.Load<Font>("Fonts/PatrickHandSC-Regular") ?? BuiltinFont);
+    public static Font DialogueFont => dialogueFont ??= (Resources.Load<Font>("Fonts/AtkinsonHyperlegible-Bold") ?? BuiltinFont);
 
     static Font uiFont;
-    public static Font UiFont => uiFont ??= (Resources.Load<Font>("Fonts/ProtestGuerrilla-Regular") ?? BuiltinFont);
+    public static Font UiFont => uiFont ??= (Resources.Load<Font>("Fonts/AbolitionTest-Rough") ?? BuiltinFont);
 
     static Font headlineFont;
     public static Font HeadlineFont => headlineFont ??= (Resources.Load<Font>("Fonts/MMA champ") ?? BuiltinFont);
@@ -155,7 +156,7 @@ public static class UIFactory
 
     // Quick Fix (Font Replacement Pass), Part 5: these two helpers are exactly
     // the "reading text" category (descriptions, flavor quotes, tips) most at
-    // risk from PatrickHandSC-Regular's wider, handwritten glyph metrics, and
+    // risk from AtkinsonHyperlegible-Bold's glyph metrics, and
     // they're already the shared chokepoint most screens use for that content.
     // Best-fit only ever shrinks text that wouldn't otherwise fit - anything
     // that already fit at the requested size renders identically, so this is
@@ -760,7 +761,7 @@ public static class UIFactory
         // defaults to the dramatic headline font globally.
         lineText.font = DialogueFont;
         // Quick Fix (Font Replacement Pass), Part 7: rival lines can run a
-        // full sentence or two - PatrickHandSC-Regular's wider handwritten
+        // full sentence or two - AtkinsonHyperlegible-Bold's
         // glyphs risk wrapping past this box's fixed height. Best-fit only
         // shrinks if it actually needs to.
         lineText.resizeTextForBestFit = true;
@@ -812,7 +813,7 @@ public static class UIFactory
     // (already set by CreatePanel) remains the background - a safe, silent fallback.
     // Safe to call repeatedly (e.g. once per gym visit) - replaces any previous
     // background rather than stacking duplicates.
-    public static void ApplyScreenBackground(GameObject root, string key)
+    public static void ApplyScreenBackground(GameObject root, string key, bool addReadabilityTint = true)
     {
         var existing = root.transform.Find("Background");
         if (existing != null) Object.Destroy(existing.gameObject);
@@ -835,6 +836,8 @@ public static class UIFactory
         // landscape-shaped (1920x1080) art replaces these - it will simply fill
         // edge-to-edge with no visible letterbox at that point.
         image.preserveAspect = true;
+
+        if (!addReadabilityTint) return;
 
         // Keeps foreground text readable when future artwork is bright or detailed.
         var tintGo = new GameObject("ReadabilityTint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
