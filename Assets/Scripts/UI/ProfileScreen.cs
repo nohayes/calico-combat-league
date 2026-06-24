@@ -48,22 +48,27 @@ public class ProfileScreen : UIScreen
         statusText = UIFactory.CreateText(Root.transform, "", UIFactory.BodySize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.08f, 0.17f), new Vector2(0.92f, 0.29f), FontStyle.Bold);
 
-        // Profile is the management hub: Stats, Moves, and Hall of Fame are all
-        // reachable from here (Hall of Fame and Moves no longer have their own
-        // buttons on the Home screen).
-        // Milestone 45, Part 3: row recomputed for 5 even columns (was 4) to
-        // make room for PRESTIGE - chosen over Hall of Champions per the
-        // brief's "fewest changes" guidance, since this row already exists
-        // and just needed one more evenly-spaced slot.
-        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.03f, 0.03f), new Vector2(0.202f, 0.13f),
+        // Profile is the management hub: Stats, Moves, Career, and Hall of
+        // Fame are all reachable from here (Hall of Fame and Moves no longer
+        // have their own buttons on the Home screen).
+        // Milestone 47, Part 1: row recomputed for 6 even columns (was 5) to
+        // make room for CAREER - lowest-risk slot per the brief, since this
+        // row already exists and just needed one more evenly-spaced column.
+        // The standalone HALL OF FAME button/screen are left exactly as they
+        // were ("do not remove existing screens") - Career's own Hall of Fame
+        // tab is a cleaner presentation of the same underlying records, not a
+        // replacement for the dedicated screen.
+        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.03f, 0.03f), new Vector2(0.172f, 0.13f),
             () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.222f, 0.03f), new Vector2(0.394f, 0.13f),
+        UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.19f, 0.03f), new Vector2(0.332f, 0.13f),
             () => GM.ChangeState(GameState.MovesScreen), UIFactory.SecondaryColor);
-        prestigeButton = UIFactory.CreateButton(Root.transform, "PRESTIGE", new Vector2(0.414f, 0.03f), new Vector2(0.586f, 0.13f),
+        prestigeButton = UIFactory.CreateButton(Root.transform, "PRESTIGE", new Vector2(0.35f, 0.03f), new Vector2(0.492f, 0.13f),
             () => ShowPrestigeConfirm(), UIFactory.DangerColor);
-        UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.606f, 0.03f), new Vector2(0.778f, 0.13f),
+        UIFactory.CreateButton(Root.transform, "CAREER", new Vector2(0.51f, 0.03f), new Vector2(0.652f, 0.13f),
+            () => GM.ChangeState(GameState.CareerScreen), UIFactory.SecondaryColor);
+        UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.67f, 0.03f), new Vector2(0.812f, 0.13f),
             () => GM.ChangeState(GameState.HallOfChampionsScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.798f, 0.03f), new Vector2(0.97f, 0.13f),
+        UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.83f, 0.03f), new Vector2(0.97f, 0.13f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
 
         prestigeConfirmPanel = BuildPrestigeConfirmPanel();

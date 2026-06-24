@@ -20,6 +20,7 @@ public class UIManager : MonoBehaviour
     HallOfChampionsScreen hallOfChampionsScreen;
     SettingsScreen settingsScreen;
     StreetFightScreen streetFightScreen;
+    CareerScreen careerScreen;
 
     void Start()
     {
@@ -42,6 +43,7 @@ public class UIManager : MonoBehaviour
         hallOfChampionsScreen = new HallOfChampionsScreen(transform, gm);
         settingsScreen = new SettingsScreen(transform, gm);
         streetFightScreen = new StreetFightScreen(transform, gm);
+        careerScreen = new CareerScreen(transform, gm);
 
         CreateGlobalAudioButton();
 
@@ -97,6 +99,7 @@ public class UIManager : MonoBehaviour
         hallOfChampionsScreen.SetVisible(state == GameState.HallOfChampionsScreen);
         settingsScreen.SetVisible(state == GameState.Settings);
         streetFightScreen.SetVisible(state == GameState.StreetFight);
+        careerScreen.SetVisible(state == GameState.CareerScreen);
 
         switch (state)
         {
@@ -150,6 +153,9 @@ public class UIManager : MonoBehaviour
                 break;
             case GameState.StreetFight:
                 streetFightScreen.Refresh();
+                break;
+            case GameState.CareerScreen:
+                careerScreen.Refresh();
                 break;
         }
     }

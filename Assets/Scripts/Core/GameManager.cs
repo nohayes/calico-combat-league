@@ -41,6 +41,10 @@ public class GameManager : MonoBehaviour
     // Streak" readout - incremented on a win, reset on a loss, in EndBattle.
     public int CurrentWinStreak { get; private set; }
 
+    // Milestone 47 (Career Records): the running peak of CurrentWinStreak -
+    // never decreases, so it survives the loss that resets CurrentWinStreak.
+    public int BestWinStreak { get; private set; }
+
     // Milestone 45 (Prestige / New Game+) - Part 9's "local score foundation."
     public int PrestigeLevel { get; private set; }
     public int TotalGameCompletions { get; private set; }
@@ -324,6 +328,7 @@ public class GameManager : MonoBehaviour
             TotalCoinsEarned += LastRewardCoins;
             TotalWins++;
             CurrentWinStreak++;
+            if (CurrentWinStreak > BestWinStreak) BestWinStreak = CurrentWinStreak;
             if (submissionFinish) SubmissionWins++;
             // Bug fix (World Polish Pass): must be captured before adding to
             // defeatedOpponentIds below, or HasDefeatedShadowChampion would
@@ -861,6 +866,7 @@ public class GameManager : MonoBehaviour
             HallOfChampions = hallOfChampions.ToList(),
             HasSeenRivalIntro = hasSeenRivalIntro,
             CurrentWinStreak = CurrentWinStreak,
+            BestWinStreak = BestWinStreak,
             PrestigeLevel = PrestigeLevel,
             TotalGameCompletions = TotalGameCompletions,
             HighestPrestigeReached = HighestPrestigeReached
@@ -937,6 +943,9 @@ public class GameManager : MonoBehaviour
         MaxSingleHitDamage = Mathf.Max(0, data.MaxSingleHitDamage);
         SubmissionWins = Mathf.Max(0, data.SubmissionWins);
         CurrentWinStreak = Mathf.Max(0, data.CurrentWinStreak);
+        // Older saves predate this field (default 0) - never let it read
+        // lower than the streak already in progress.
+        BestWinStreak = Mathf.Max(Mathf.Max(0, data.BestWinStreak), CurrentWinStreak);
         PrestigeLevel = Mathf.Clamp(data.PrestigeLevel, 0, PrestigeSystem.MaxPrestigeLevel);
         TotalGameCompletions = Mathf.Max(0, data.TotalGameCompletions);
         HighestPrestigeReached = Mathf.Max(PrestigeLevel, Mathf.Max(0, data.HighestPrestigeReached));

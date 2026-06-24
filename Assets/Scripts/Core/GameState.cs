@@ -16,5 +16,6 @@ public enum GameState
     ProfileScreen,
     HallOfChampionsScreen,
     Settings,
-    StreetFight
+    StreetFight,
+    CareerScreen
 }

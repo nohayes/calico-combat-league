@@ -54,6 +54,11 @@ public class SaveData
     // correct (a fresh streak, not a fabricated one).
     public int CurrentWinStreak;
 
+    // Milestone 47 (Career Records): the running peak of CurrentWinStreak.
+    // Missing on older saves -> defaults to 0; GameManager.LoadGame backfills
+    // it to at least the current streak so it's never reported lower.
+    public int BestWinStreak;
+
     // Milestone 45 (Prestige / New Game+). Missing on older saves -> all
     // default to 0, which is exactly correct: a save that predates Prestige
     // has never prestiged and has completed the game zero times by this
