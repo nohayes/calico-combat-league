@@ -26,4 +26,11 @@ public class OpponentInfo
     // Milestone 34, Part 5: opt-in flag forwarded onto the FighterData
     // BattleSystem actually reads. False for every opponent except Rival Scratch.
     public bool IsSmartFighter;
+
+    // Milestone 51, Part 3/5: a small additive bias (percentage points) on
+    // top of BattleSystem's existing AI defensive-stance roll - 0 for every
+    // opponent except Wrestling gym fighters, who lean more on Parry/Clinch
+    // to reinforce that gym's "control" identity. Adjusts an existing
+    // weight; no new AI behavior.
+    public int DefenseBiasPercent;
 }

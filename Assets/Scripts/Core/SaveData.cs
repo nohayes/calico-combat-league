@@ -68,4 +68,19 @@ public class SaveData
     public int PrestigeLevel;
     public int TotalGameCompletions;
     public int HighestPrestigeReached;
+
+    // Milestone 49 (Combat Record Book). Missing on older saves -> all
+    // default to 0/false, which is correct - a save that predates this
+    // milestone simply has no history of these stats to report, exactly the
+    // same reasoning as every other lifetime-stat field above.
+    public int TotalCriticalHits;
+    public int MostCriticalHitsInOneFight;
+    public int TotalCombosTriggered;
+    public int MostCombosInOneFight;
+    public int TotalParries;
+    public int SuccessfulParries;
+    public int TotalClinches;
+    public int TotalTakedownsLanded;
+    public int StreetFightWins;
+    public bool HasWonWithOneHP;
 }

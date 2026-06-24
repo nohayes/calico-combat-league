@@ -31,6 +31,28 @@ public class GameManager : MonoBehaviour
     // level-milestone intercept on the Victory screen.
     public int LastVictoryLeveledUpTo { get; set; }
 
+    // Overnight Audit (Reward/Randomness): presentation-only, same pattern as
+    // the fields above - set in EndBattle's win branch, never saved. 0 unless
+    // this fight's "lucky break" roll actually hit.
+    public int LastLuckyBreakBonus { get; private set; }
+
+    // Milestone 50, Part 1 (Record Celebrations): presentation-only, same
+    // pattern as the fields above - set once per EndBattle call by comparing
+    // this fight's per-fight counters against the lifetime peaks BEFORE they
+    // get updated. False/0 on almost every fight; only true the moment a
+    // record is actually broken. Never saved.
+    public bool LastFightNewComboRecord { get; private set; }
+    public bool LastFightNewCritRecord { get; private set; }
+    public bool LastFightNewWinStreakRecord { get; private set; }
+    public int LastStreetFightMilestone { get; private set; }
+
+    // Milestone 56, Part 6 (Career Highlight Celebrations): same transient,
+    // never-saved pattern as the fields above. LastStreetFightMilestone
+    // (Milestone 50) already doubles as the "hit 50 Street Fight Wins"
+    // signal, so only these two are new.
+    public bool LastFightFirstGymCleared { get; private set; }
+    public bool LastFightHit100Combos { get; private set; }
+
     // ---------- Lifetime stats (persist across StartNewGame/StartFreshGame - see Milestone 11) ----------
 
     public int TotalWins { get; private set; }
@@ -64,6 +86,22 @@ public class GameManager : MonoBehaviour
     public int MaxSingleHitDamage { get; private set; }
     public int SubmissionWins { get; private set; }
 
+    // Milestone 49 (Combat Record Book): folded in from BattleSystem's
+    // per-fight PLAYER-only counters at the end of every win/loss in
+    // EndBattle - see the "Milestone 49" block there for exactly how.
+    public int TotalCriticalHits { get; private set; }
+    public int MostCriticalHitsInOneFight { get; private set; }
+    public int TotalCombosTriggered { get; private set; }
+    public int MostCombosInOneFight { get; private set; }
+    public int TotalParries { get; private set; }
+    public int SuccessfulParries { get; private set; }
+    public int TotalClinches { get; private set; }
+    public int TotalTakedownsLanded { get; private set; }
+    public int StreetFightWins { get; private set; }
+    // "Win with 1 HP" is a one-time accomplishment, not a counter - same
+    // boolean-flag shape as HasBecomeChampion/HasDefeatedRival elsewhere.
+    public bool HasWonWithOneHP { get; private set; }
+
     // Gyms cleared by the CURRENT fighter (resets per playthrough, unlike the lifetime stats above).
     public int TotalGymsCleared => completedGymIds.Count;
 
@@ -80,6 +118,28 @@ public class GameManager : MonoBehaviour
     readonly List<ChampionRecord> hallOfChampions = new List<ChampionRecord>();
 
     public IReadOnlyList<ChampionRecord> HallOfChampions => hallOfChampions;
+
+    // Milestone 49, Part 1/2: "Rival Wins" and "Total Championships Won" are
+    // both fully derivable from existing Hall of Champions entries - no new
+    // save fields needed. RecordChampionLegacy adds an untitled entry per
+    // championship; RecordRivalVictoryLegacy always titles its entry "Rival
+    // Conqueror" - both fire once per genuinely new completion (per Prestige
+    // cycle), so counting entries already gives an accurate lifetime total.
+    public int RivalWinCount => CountHallOfChampionsTitled("Rival Conqueror");
+    public int ChampionshipWinCount => CountHallOfChampionsTitled("");
+    // Milestone 44 named this "True Champion"; pre-Milestone-44 saves may
+    // still hold the old "Shadow Slayer" title - both count as Mirror Match
+    // wins, same backward-compat reasoning used everywhere else this title
+    // is checked.
+    public int MirrorMatchWinCount => TotalGameCompletions;
+
+    int CountHallOfChampionsTitled(string title)
+    {
+        int count = 0;
+        foreach (var record in hallOfChampions)
+            if ((record.Title ?? "") == title) count++;
+        return count;
+    }
 
     readonly HashSet<string> defeatedOpponentIds = new HashSet<string>();
     readonly HashSet<string> completedGymIds = new HashSet<string>();
@@ -275,7 +335,8 @@ public class GameManager : MonoBehaviour
         // playthrough" - rather than one superseding the other).
         PrestigeSystem.ApplyScaling(opponentStats, PrestigeLevel);
 
-        CurrentOpponent = new FighterData(opponent.Name, opponentStats, opponent.Moves) { IsSmartFighter = opponent.IsSmartFighter };
+        CurrentOpponent = new FighterData(opponent.Name, opponentStats, opponent.Moves)
+            { IsSmartFighter = opponent.IsSmartFighter, DefenseBiasPercent = opponent.DefenseBiasPercent };
         CurrentBattle = new BattleSystem(Player, CurrentOpponent);
         ChangeState(GameState.Battle);
     }
@@ -303,6 +364,55 @@ public class GameManager : MonoBehaviour
         }
 
         RevertCombatBuff();
+
+        // Milestone 50, Part 1 (Record Celebrations): reset every call, and
+        // capture the peaks BEFORE folding this fight's counters in below, so
+        // the comparisons after the fold-in can tell whether a record was
+        // ACTUALLY just broken (vs. merely tied or already held).
+        LastFightNewComboRecord = false;
+        LastFightNewCritRecord = false;
+        LastFightNewWinStreakRecord = false;
+        LastStreetFightMilestone = 0;
+        LastFightFirstGymCleared = false;
+        LastFightHit100Combos = false;
+        int comboRecordBefore = MostCombosInOneFight;
+        int critRecordBefore = MostCriticalHitsInOneFight;
+        int winStreakRecordBefore = BestWinStreak;
+        // Milestone 56, Part 6: "before" snapshot for the 100-combos Career
+        // Highlight, same before/after comparison pattern as the records above.
+        int totalCombosBefore = TotalCombosTriggered;
+
+        // Milestone 49 (Combat Record Book): fold this fight's PLAYER-only
+        // counters from BattleSystem into lifetime totals/peaks BEFORE the
+        // win/loss split below - combos/crits/parries/clinches can all
+        // happen in a fight the player ultimately loses, and "Total X"
+        // stats should count every fight, not just wins. Cleanup() only
+        // reverts status effects, never touches these counters, but
+        // CurrentBattle is about to go out of scope after this method, so
+        // this is the one and only place to capture them.
+        if (CurrentBattle != null)
+        {
+            TotalCriticalHits += CurrentBattle.PlayerCriticalHits;
+            if (CurrentBattle.PlayerCriticalHits > MostCriticalHitsInOneFight) MostCriticalHitsInOneFight = CurrentBattle.PlayerCriticalHits;
+            TotalCombosTriggered += CurrentBattle.PlayerCombosTriggered;
+            if (CurrentBattle.PlayerCombosTriggered > MostCombosInOneFight) MostCombosInOneFight = CurrentBattle.PlayerCombosTriggered;
+            TotalParries += CurrentBattle.PlayerParriesAttempted;
+            SuccessfulParries += CurrentBattle.PlayerParriesSucceeded;
+            TotalClinches += CurrentBattle.PlayerClinches;
+            TotalTakedownsLanded += CurrentBattle.PlayerTakedownsLanded;
+
+            // Only a genuine break (not a fresh-from-zero tie) counts as a
+            // celebration-worthy record - both sides of this comparison are
+            // already updated above, so a fight with 0 combos can never
+            // falsely claim a "record" of 0.
+            LastFightNewComboRecord = MostCombosInOneFight > comboRecordBefore;
+            LastFightNewCritRecord = MostCriticalHitsInOneFight > critRecordBefore;
+            // Milestone 56, Part 6: a lifetime-total threshold crossing -
+            // distinct from MostCombosInOneFight's per-fight peak, so this
+            // can fire independently of (and won't double up with) the
+            // Milestone 50 combo-record celebration above.
+            LastFightHit100Combos = totalCombosBefore < 100 && TotalCombosTriggered >= 100;
+        }
         CurrentBattle?.Cleanup();
 
         LastVictoryUnlockedGym = false;
@@ -326,10 +436,31 @@ public class GameManager : MonoBehaviour
             LastVictoryLeveledUpTo = Player.Stats.Level > levelBeforeReward ? Player.Stats.Level : 0;
             Player.Stats.Coins += LastRewardCoins;
             TotalCoinsEarned += LastRewardCoins;
+
+            // Overnight Audit (Reward/Randomness): a small, low-risk "lucky
+            // break" bonus, Street Fight wins only (per the brief's own
+            // example) - a 12% chance at a modest flat coin bonus on top of
+            // the normal reward. Purely additive flavor, no new systems.
+            LastLuckyBreakBonus = 0;
+            if (CurrentGym?.GymId == "street_fight" && UnityEngine.Random.Range(0, 100) < 12)
+            {
+                LastLuckyBreakBonus = UnityEngine.Random.Range(15, 31);
+                Player.Stats.Coins += LastLuckyBreakBonus;
+                TotalCoinsEarned += LastLuckyBreakBonus;
+            }
+
             TotalWins++;
             CurrentWinStreak++;
             if (CurrentWinStreak > BestWinStreak) BestWinStreak = CurrentWinStreak;
+            LastFightNewWinStreakRecord = BestWinStreak > winStreakRecordBefore;
             if (submissionFinish) SubmissionWins++;
+            if (Player.Stats.CurrentHealth == 1) HasWonWithOneHP = true;
+            if (CurrentGym?.GymId == "street_fight")
+            {
+                StreetFightWins++;
+                if (StreetFightWins == 10 || StreetFightWins == 25 || StreetFightWins == 50 || StreetFightWins == 100)
+                    LastStreetFightMilestone = StreetFightWins;
+            }
             // Bug fix (World Polish Pass): must be captured before adding to
             // defeatedOpponentIds below, or HasDefeatedShadowChampion would
             // always read true by the time RecordShadowChampionVictory's guard
@@ -348,6 +479,13 @@ public class GameManager : MonoBehaviour
                 bool wasAlreadyCompleted = completedGymIds.Contains(CurrentGym.GymId);
                 completedGymIds.Add(CurrentGym.GymId);
                 LastVictoryUnlockedGym = !wasAlreadyCompleted;
+                // Milestone 56, Part 6: "First Gym Cleared" is meant as a
+                // true once-ever Career Highlight, not a per-Prestige-cycle
+                // one - gated on PrestigeLevel == 0 so it doesn't re-fire the
+                // next time the player clears the first gym of a new league.
+                if (LastVictoryUnlockedGym && GymDatabase.AllGyms.Count > 0 &&
+                    CurrentGym.GymId == GymDatabase.AllGyms[0].GymId && PrestigeLevel == 0)
+                    LastFightFirstGymCleared = true;
 
                 TryUnlockGymMove(CurrentGym);
 
@@ -529,8 +667,17 @@ public class GameManager : MonoBehaviour
             Title = $"Completed {PrestigeSystem.FormatLevel(PrestigeLevel)}"
         });
 
+        // Milestone 49: Legend/Immortal key off HighestPrestigeReached, which
+        // just changed above - check immediately so they unlock the moment
+        // the player prestiges, not on whatever fight happens to come next.
+        CheckAchievements();
         SaveGame();
-        ChangeState(GameState.GymMap);
+        // Milestone 57, Part 1/7: no longer transitions to GymMap directly -
+        // ProfileScreen now shows a short reveal moment first and changes
+        // state itself once that reveal closes. All actual Prestige data
+        // (level, reset, Hall of Champions entry, save) is already fully
+        // committed above by this point regardless of how long the reveal
+        // takes or whether the player taps through it early.
     }
 
     // Milestone 39, Part 9: the Rival Showdown's own permanent legacy entry -
@@ -681,6 +828,12 @@ public class GameManager : MonoBehaviour
             case AchievementMetric.DefeatedRival: return HasDefeatedRival ? 1 : 0;
             case AchievementMetric.DefeatedSecretFighter: return HasDefeatedSecretFighter ? 1 : 0;
             case AchievementMetric.DefeatedMirrorMatch: return HasDefeatedShadowChampion ? 1 : 0;
+            case AchievementMetric.CombosTriggered: return TotalCombosTriggered;
+            case AchievementMetric.Clinches: return TotalClinches;
+            case AchievementMetric.Parries: return TotalParries;
+            case AchievementMetric.StreetFightWins: return StreetFightWins;
+            case AchievementMetric.HighestPrestigeReached: return HighestPrestigeReached;
+            case AchievementMetric.WonWithOneHP: return HasWonWithOneHP ? 1 : 0;
             default: return 0;
         }
     }
@@ -869,7 +1022,17 @@ public class GameManager : MonoBehaviour
             BestWinStreak = BestWinStreak,
             PrestigeLevel = PrestigeLevel,
             TotalGameCompletions = TotalGameCompletions,
-            HighestPrestigeReached = HighestPrestigeReached
+            HighestPrestigeReached = HighestPrestigeReached,
+            TotalCriticalHits = TotalCriticalHits,
+            MostCriticalHitsInOneFight = MostCriticalHitsInOneFight,
+            TotalCombosTriggered = TotalCombosTriggered,
+            MostCombosInOneFight = MostCombosInOneFight,
+            TotalParries = TotalParries,
+            SuccessfulParries = SuccessfulParries,
+            TotalClinches = TotalClinches,
+            TotalTakedownsLanded = TotalTakedownsLanded,
+            StreetFightWins = StreetFightWins,
+            HasWonWithOneHP = HasWonWithOneHP
         };
 
         SaveSystem.Save(data);
@@ -949,6 +1112,18 @@ public class GameManager : MonoBehaviour
         PrestigeLevel = Mathf.Clamp(data.PrestigeLevel, 0, PrestigeSystem.MaxPrestigeLevel);
         TotalGameCompletions = Mathf.Max(0, data.TotalGameCompletions);
         HighestPrestigeReached = Mathf.Max(PrestigeLevel, Mathf.Max(0, data.HighestPrestigeReached));
+
+        // Milestone 49 (Combat Record Book) - missing on older saves -> 0/false.
+        TotalCriticalHits = Mathf.Max(0, data.TotalCriticalHits);
+        MostCriticalHitsInOneFight = Mathf.Max(0, data.MostCriticalHitsInOneFight);
+        TotalCombosTriggered = Mathf.Max(0, data.TotalCombosTriggered);
+        MostCombosInOneFight = Mathf.Max(0, data.MostCombosInOneFight);
+        TotalParries = Mathf.Max(0, data.TotalParries);
+        SuccessfulParries = Mathf.Max(0, data.SuccessfulParries);
+        TotalClinches = Mathf.Max(0, data.TotalClinches);
+        TotalTakedownsLanded = Mathf.Max(0, data.TotalTakedownsLanded);
+        StreetFightWins = Mathf.Max(0, data.StreetFightWins);
+        HasWonWithOneHP = data.HasWonWithOneHP;
 
         unlockedAchievementIds.Clear();
         if (data.UnlockedAchievementIds != null)

@@ -11,7 +11,10 @@ public class BattleSystem
     // which is what makes the new Recover action (below) actually matter.
     const int StaminaRegenPerTurn = 5;
     const int RecoverActionAmount = 18;
-    const int AiRecoverChancePercent = 60;
+    // Overnight Audit: 60 -> 50. AI at low stamina was recovering more
+    // often than not, making it read as predictably defensive in that state;
+    // nudged down so it's more willing to keep pushing offense instead.
+    const int AiRecoverChancePercent = 50;
     const int MaxComboTrackLength = 3;
 
     const int BleedDuration = 3;
@@ -50,6 +53,19 @@ public class BattleSystem
 
     public readonly FighterData Player;
     public readonly FighterData Opponent;
+
+    // Milestone 49 (Combat Record Book): per-fight PLAYER-only counters,
+    // read once by GameManager.EndBattle right after CurrentBattle.Cleanup()
+    // (which only reverts status effects and never touches these) and folded
+    // into lifetime totals there - same handoff pattern as the existing
+    // RecentPlayerMoveIds read-only exposure. Opponent actions are never
+    // counted; these track the player's own accomplishments only.
+    public int PlayerCriticalHits { get; private set; }
+    public int PlayerCombosTriggered { get; private set; }
+    public int PlayerParriesAttempted { get; private set; }
+    public int PlayerParriesSucceeded { get; private set; }
+    public int PlayerClinches { get; private set; }
+    public int PlayerTakedownsLanded { get; private set; }
 
     readonly System.Random rng = new System.Random();
     readonly List<ActiveStatusEffect> playerEffects = new List<ActiveStatusEffect>();
@@ -124,6 +140,7 @@ public class BattleSystem
     // round regardless of which side acts first.
     public BattleResult PlayerParry(List<string> log)
     {
+        PlayerParriesAttempted++;
         bool playerActsFirst = RollsFirst(Player.Stats.Speed, Opponent.Stats.Speed);
         log.Add(playerActsFirst ? $"{Player.Name} acts first this round." : $"{Opponent.Name} acts first this round.");
         playerStance = StanceType.Parry;
@@ -149,6 +166,7 @@ public class BattleSystem
     // structure as PlayerParry, different stance.
     public BattleResult PlayerClinch(List<string> log)
     {
+        PlayerClinches++;
         bool playerActsFirst = RollsFirst(Player.Stats.Speed, Opponent.Stats.Speed);
         log.Add(playerActsFirst ? $"{Player.Name} acts first this round." : $"{Opponent.Name} acts first this round.");
         playerStance = StanceType.Clinch;
@@ -308,10 +326,15 @@ public class BattleSystem
         bool aiLosingBadly = Opponent.Stats.CurrentHealth < Opponent.Stats.MaxHealth * 0.4f
             && Opponent.Stats.CurrentHealth < Player.Stats.CurrentHealth;
         bool facingComboPressure = IsBuildingTowardCombo(recentPlayerMoveIds);
+        // Milestone 51, Part 3/5: opponent-specific additive bias (0 for
+        // everyone except Wrestling gym fighters) - reinforces that gym's
+        // "control" identity by having its fighters lean on Parry/Clinch
+        // more, so the player has to learn those mechanics to get past them.
         int defenseChance = AiDefenseBaseChancePercent
             + (staminaRatio < AiLowStaminaRatioThreshold ? AiDefenseLowStaminaBonusPercent : 0)
             + (aiLosingBadly ? AiDefenseLosingBadlyBonusPercent : 0)
-            + (facingComboPressure ? AiDefenseComboPressureBonusPercent : 0);
+            + (facingComboPressure ? AiDefenseComboPressureBonusPercent : 0)
+            + Opponent.DefenseBiasPercent;
         bool wantsToDefend = !wantsToRecover && rng.Next(0, 100) < defenseChance;
 
         var move = (wantsToRecover || wantsToDefend) ? null : ChooseEnemyMove(Opponent);
@@ -516,6 +539,7 @@ public class BattleSystem
 
         bool crit = move.HasEffect(MoveEffect.CriticalHit) && rng.Next(0, 100) < move.EffectChance;
         if (crit) baseDamage *= 1.5f;
+        if (crit && attacker == Player) PlayerCriticalHits++;
 
         // Milestone 31, Part 6/7: the combo bonus only announces once the move
         // is confirmed to land - the move's own name stays in the hit line
@@ -526,6 +550,7 @@ public class BattleSystem
         // AI landing it by chance.
         if (combo != null)
         {
+            if (attacker == Player) PlayerCombosTriggered++;
             baseDamage *= combo.DamageBonusMultiplier;
             attacker.Stats.CurrentStamina = Mathf.Min(attacker.Stats.MaxStamina, attacker.Stats.CurrentStamina + combo.StaminaRefund);
             log.Add($"{attacker.Name} lands a COMBO! {combo.DisplayName}!");
@@ -549,6 +574,7 @@ public class BattleSystem
             {
                 fullyBlocked = true;
                 baseDamage = 0f;
+                if (defender == Player) PlayerParriesSucceeded++;
                 defender.Stats.CurrentStamina = Mathf.Min(defender.Stats.MaxStamina, defender.Stats.CurrentStamina + ParryFullBlockStaminaGain);
                 log.Add($"{defender.Name} reads it perfectly! PARRY!");
             }
@@ -577,6 +603,11 @@ public class BattleSystem
 
         int damage = fullyBlocked ? 0 : Mathf.Max(1, Mathf.RoundToInt(baseDamage));
         defender.Stats.CurrentHealth = Mathf.Max(0, defender.Stats.CurrentHealth - damage);
+
+        // Milestone 49: a landed Control-category move (Double Leg Takedown
+        // etc.) is the closest existing concept to "takedown" - only counts
+        // if it actually connected, not a blocked attempt.
+        if (attacker == Player && !fullyBlocked && move.Category == MoveCategory.Control) PlayerTakedownsLanded++;
 
         // Milestone 41, Part 3: an MMA-themed clause appended after the exact
         // existing sentence (numbers and all) - appended, not replaced, so

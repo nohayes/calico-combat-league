@@ -30,17 +30,32 @@ public class GymSelectionScreen : UIScreen
     const int Columns = 3;
     const float GridXMin = 0.05f;
     const float GridXMax = 0.95f;
-    const float GridTop = 0.78f;
+    // Milestone 54, Part 4/5: nudged down 0.025 from 0.78 to make room for
+    // the new Current Goal banner below the heading - the grid itself,
+    // column/row math, and card sizing are otherwise completely unchanged.
+    const float GridTop = 0.755f;
     const float ColumnGap = 0.018f;
     const float RowGap = 0.035f;
 
+    readonly Text goalText;
+
     public GymSelectionScreen(Transform parent, GameManager gm) : base(parent, gm, "GymSelectionScreen", "gym_map")
     {
-        UIFactory.CreateHeading(Root.transform, "SELECT YOUR GYM", new Vector2(0.06f, 0.88f), new Vector2(0.94f, 0.98f));
+        UIFactory.CreateHeading(Root.transform, "SELECT YOUR GYM", new Vector2(0.06f, 0.90f), new Vector2(0.94f, 0.98f));
+
+        // Milestone 54, Part 4/8: current objective + a lightweight
+        // completion tally, both derived live from existing progression
+        // state - no new save fields. Gold, since this is the screen's most
+        // important "what do I do next" header per the unified palette rules.
+        goalText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.06f, 0.855f), new Vector2(0.94f, 0.895f), TextAnchor.MiddleCenter);
+        goalText.color = UIFactory.GoldColor;
+        goalText.fontStyle = FontStyle.Bold;
+        goalText.resizeTextMinSize = 12;
+        goalText.resizeTextMaxSize = UIFactory.BodySize;
 
         // Milestone 22, Part 7: a small recurring rival comments on your progress
         // while you pick your next gym. Reuses existing GameManager stats only.
-        rivalText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.06f, 0.8f), new Vector2(0.94f, 0.87f), TextAnchor.MiddleCenter);
+        rivalText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.06f, 0.775f), new Vector2(0.94f, 0.845f), TextAnchor.MiddleCenter);
         // Typography pass: this carries real narrative weight (the rival
         // tracker status, including "this is it" right before the showdown
         // becomes available) but read as throwaway muted caption text.
@@ -101,6 +116,10 @@ public class GymSelectionScreen : UIScreen
         if (mirrorMatchReady)
             BuildShadowBanner(new Vector2(0.05f, lowerSlot), new Vector2(0.95f, lowerSlot + bannerHeight));
 
+        // Milestone 54, Part 4/8: current objective + completion tally,
+        // refreshed every time this screen is shown.
+        goalText.text = $"CURRENT GOAL: {GetCurrentObjective()}\n{GetProgressionSummary()}";
+
         // Milestone 33, Part 2/5: the rival's existing progress quip plus the
         // Rival Tracker status, so this screen doubles as "world presence."
         rivalText.text = $"{RivalDatabase.RivalName}: \"{RivalDatabase.GetLine(GM)}\"\n{RivalDatabase.GetRivalStatus(GM)}";
@@ -154,13 +173,20 @@ public class GymSelectionScreen : UIScreen
             tagline = "Cleared";
             taglineColor = UIFactory.PositiveColor;
             accentColor = UIFactory.PositiveColor;
-            badgeText = "CLEARED";
+            // Milestone 54, Part 1: an explicit checkmark reads as "completed"
+            // at a glance faster than the word "CLEARED" alone.
+            badgeText = "✓ COMPLETED";
         }
         else if (unlocked)
         {
             tagline = !string.IsNullOrEmpty(gym.Motto) ? gym.Motto : "Available";
             taglineColor = IconFactory.GetGymThemeColor(gym.GymType);
-            accentColor = UIFactory.AccentOrange;
+            // Milestone 54, Part 7: Championship gets Gold instead of the
+            // generic Action Orange while available - a small, existing-
+            // palette cue that it's the league's most important destination,
+            // distinct from a regular gym - without touching its card's
+            // position, size, or any other gym's treatment.
+            accentColor = gym.GymType == GymType.Championship ? UIFactory.GoldColor : UIFactory.AccentOrange;
             badgeText = "SELECTED";
         }
         else
@@ -177,6 +203,17 @@ public class GymSelectionScreen : UIScreen
         iconSprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
         iconColor = interactable ? Color.white : new Color(1f, 1f, 1f, 0.5f);
 
+        // Milestone 54, Part 2/3/6: replaces the card's old single flavor
+        // sentence with the denser progression info this milestone asks
+        // for - personality tag, lesson learned, and reward earned/pending.
+        // Reuses the exact same description text element/styling (no new
+        // UI, no BuildCard signature change) - just different content.
+        // Uses GymInfo.LessonText/UnlockMoveId directly (Milestone 52/53
+        // data, no duplication) - Championship has neither a personality tag
+        // nor a LessonText, so its block naturally reduces to just the
+        // reward line.
+        description = BuildGymInfoBlock(gym, completed);
+
         GetCardAnchors(index, gridBottom, out Vector2 anchorMin, out Vector2 anchorMax);
         var cardButton = BuildCard(anchorMin, anchorMax, accentColor, interactable,
             () => TravelToGym(gym),
@@ -189,6 +226,48 @@ public class GymSelectionScreen : UIScreen
             // FirstAppearanceLines greeting on the Home screen already covers
             // the start of the run.
             if (unlocked && index > 0) pendingInterceptGym = gym;
+        }
+    }
+
+    // Milestone 54, Part 2/3/6: one combined info string per gym card -
+    // personality tag (if any), lesson learned/pending (Milestone 52/53
+    // data, read directly from GymInfo.LessonText, never duplicated), and
+    // the move reward earned/pending (resolved from GymInfo.UnlockMoveId via
+    // the existing MoveDatabase lookup). Each line only appears if there's
+    // real data behind it, so Championship (no personality, no LessonText)
+    // naturally shows just its reward line.
+    static string BuildGymInfoBlock(GymInfo gym, bool completed)
+    {
+        var lines = new List<string>();
+
+        string personality = GetGymPersonality(gym.GymType);
+        if (!string.IsNullOrEmpty(personality)) lines.Add(personality);
+
+        if (!string.IsNullOrEmpty(gym.LessonText))
+            lines.Add(completed ? $"✓ Lesson: {gym.LessonText}" : "Lesson: Not Learned Yet");
+
+        var rewardMove = MoveDatabase.GetById(gym.UnlockMoveId);
+        if (rewardMove != null)
+        {
+            lines.Add(completed
+                ? $"✓ Reward Earned: {rewardMove.Name.ToUpperInvariant()}"
+                : $"Reward: {rewardMove.Name.ToUpperInvariant()}");
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    // Milestone 54, Part 6: small, static personality tags - no new data,
+    // no new systems, just naming the identity Milestone 51 already built.
+    static string GetGymPersonality(GymType type)
+    {
+        switch (type)
+        {
+            case GymType.Boxing: return "Combo-Focused";
+            case GymType.MuayThai: return "Pressure-Focused";
+            case GymType.Wrestling: return "Control-Focused";
+            case GymType.BrazilianJiuJitsu: return "Submission-Focused";
+            default: return null;
         }
     }
 
@@ -359,6 +438,52 @@ public class GymSelectionScreen : UIScreen
         label.resizeTextMinSize = 12;
         label.resizeTextMaxSize = UIFactory.BodySize;
         label.raycastTarget = false;
+    }
+
+    // Milestone 54, Part 4: derived live from existing progression state
+    // (gym completion, Rival/Mirror Match flags) - no new save fields, no
+    // tracked "current objective" of its own. Walking GymDatabase.AllGyms in
+    // its existing RequiredGymId order means this naturally cascades through
+    // exactly the same unlock chain the rest of the game already uses.
+    string GetCurrentObjective()
+    {
+        foreach (var gym in GymDatabase.AllGyms)
+        {
+            if (GM.IsGymCompleted(gym)) continue;
+            return GM.IsGymUnlocked(gym) ? $"Defeat {gym.GymName} Leader" : $"Clear earlier gyms to unlock {gym.GymName}";
+        }
+
+        if (GM.IsRivalFightReady()) return $"Defeat {RivalDatabase.RivalName}";
+        if (GM.HasDefeatedRival && !GM.HasDefeatedShadowChampion) return "Complete the Mirror Match";
+        if (GM.CanPrestige) return "Prestige to begin a new league";
+        return "You've conquered the league - keep training.";
+    }
+
+    // Milestone 54, Part 8: a lightweight one-line tally - same data this
+    // screen's cards and GetCurrentObjective already read, just counted.
+    string GetProgressionSummary()
+    {
+        var gyms = GymDatabase.AllGyms;
+        int gymsCompleted = 0, lessonsLearned = 0, lessonGymCount = 0, rewardsEarned = 0, rewardGymCount = 0;
+        foreach (var gym in gyms)
+        {
+            bool completed = GM.IsGymCompleted(gym);
+            if (completed) gymsCompleted++;
+            if (!string.IsNullOrEmpty(gym.LessonText))
+            {
+                lessonGymCount++;
+                if (completed) lessonsLearned++;
+            }
+            if (MoveDatabase.GetById(gym.UnlockMoveId) != null)
+            {
+                rewardGymCount++;
+                if (completed) rewardsEarned++;
+            }
+        }
+
+        return $"Gyms Completed: {gymsCompleted}/{gyms.Count}   |   " +
+            $"Lessons Learned: {lessonsLearned}/{lessonGymCount}   |   " +
+            $"Move Rewards Earned: {rewardsEarned}/{rewardGymCount}";
     }
 
     void TravelToGym(GymInfo gym) => GM.EnterGym(gym);

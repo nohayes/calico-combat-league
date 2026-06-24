@@ -16,6 +16,16 @@ public static class FightPresentationGenerator
     {
         if (gm?.Player == null) return "The Challenger";
 
+        // Milestone 49, Part 5: nicknames now evolve through more tiers than
+        // just the original archetype ladder, all from existing GameManager
+        // data - higher/rarer accomplishments take priority over the
+        // archetype-specific ones below, but a player who hasn't reached any
+        // of them yet sees the exact same nickname as before this milestone.
+        if (gm.HasWonWithOneHP) return "The Iron Chin";
+        if (gm.PrestigeLevel >= 5) return "The Legend";
+        if (gm.HasDefeatedShadowChampion) return "The Champion";
+        if (gm.BestWinStreak >= 10) return "The Veteran";
+
         bool champion = gm.HasBecomeChampion();
         bool proven = gm.TotalGymsCleared >= 2;
 

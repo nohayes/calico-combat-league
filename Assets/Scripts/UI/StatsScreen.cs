@@ -73,8 +73,16 @@ public class StatsScreen : UIScreen
                 Refresh();
             }, UIFactory.AccentOrange);
         pointButton.interactable = stats.StatPoints > 0;
+        // Overnight Audit: a dimmed button alone didn't say WHY it's
+        // unclickable - swapping the label to name the blocker directly
+        // (no stat points) is clearer than making the player cross-reference
+        // the header's "Stat Points: X" line themselves.
+        if (!pointButton.interactable) pointButton.GetComponentInChildren<Text>().text = "No Points";
         dynamicEntries.Add(pointButton.gameObject);
 
+        bool canAfford = stats.Coins >= FighterStats.TrainingCost;
+        // Milestone 50, Part 5/6: was PositiveColor (green) - training is an
+        // action, not a value comparison/reward.
         var trainButton = UIFactory.CreateButton(card, $"Train {FighterStats.TrainingCost}c", new Vector2(0.73f, 0.12f), new Vector2(0.98f, 0.88f),
             () =>
             {
@@ -84,8 +92,9 @@ public class StatsScreen : UIScreen
                     GM.SaveGame();
                 }
                 Refresh();
-            }, UIFactory.PositiveColor);
-        trainButton.interactable = stats.Coins >= FighterStats.TrainingCost;
+            }, UIFactory.AccentOrange);
+        trainButton.interactable = canAfford;
+        if (!canAfford) trainButton.GetComponentInChildren<Text>().text = $"Need {FighterStats.TrainingCost}c";
         dynamicEntries.Add(trainButton.gameObject);
     }
 }

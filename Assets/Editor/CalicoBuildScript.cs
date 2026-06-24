@@ -8,14 +8,14 @@ public static class CalicoBuildScript
 {
     public static void BuildWindows64()
     {
-        PlayerSettings.bundleVersion = "0.2.0 Alpha";
+        PlayerSettings.bundleVersion = "0.3.0 Alpha";
 
         var scenes = EditorBuildSettingsScene.GetActiveSceneList(EditorBuildSettings.scenes);
 
         var options = new BuildPlayerOptions
         {
             scenes = scenes,
-            locationPathName = "Builds/Windows/CalicoCombatLeague_0.2.0_Alpha/CalicoCombatLeague.exe",
+            locationPathName = "Builds/Windows/CalicoCombatLeague_0.3.0_Alpha/CalicoCombatLeague.exe",
             target = BuildTarget.StandaloneWindows64,
             options = BuildOptions.None
         };

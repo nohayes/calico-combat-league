@@ -11,16 +11,28 @@ using UnityEngine.UI;
 // Part 2/6's "Best/Longest Win Streak" ask.
 public class CareerScreen : UIScreen
 {
-    readonly string[] tabNames = { "SUMMARY", "HALL OF FAME", "TATTOOS", "MILESTONES", "RECORDS" };
+    // Milestone 49, Part 4: NEWS added as a 6th tab. Milestone 56, Part 4:
+    // HIGHLIGHTS added as a 7th - both reuse this same tab-switching
+    // infrastructure entirely, so neither needed a new screen, GameState, or
+    // nav button.
+    readonly string[] tabNames = { "SUMMARY", "HALL OF FAME", "TATTOOS", "MILESTONES", "RECORDS", "NEWS", "HIGHLIGHTS" };
     readonly Image[] tabButtonImages;
     readonly RectTransform[] tabPanels;
 
     readonly Text summaryText;
     readonly Transform hallOfFameList;
     readonly Text hallOfFameEmptyText;
+    readonly Text hallOfFameSummaryText;
     readonly Transform tattooGrid;
     readonly Text milestonesText;
     readonly Text recordsText;
+    readonly Text newsText;
+    readonly Text highlightsText;
+
+    // Lightweight cap on how many headlines are actually shown - the feed
+    // itself never stops growing as Hall of Champions grows, but most
+    // recent/current news matters most; older history just scrolls off.
+    const int MaxNewsHeadlines = 14;
 
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
 
@@ -52,10 +64,12 @@ public class CareerScreen : UIScreen
             () => GM.ChangeState(GameState.ProfileScreen), UIFactory.SecondaryColor, isBackAction: true);
 
         summaryText = BuildSummaryTab(tabPanels[0]);
-        (hallOfFameList, hallOfFameEmptyText) = BuildHallOfFameTab(tabPanels[1]);
+        (hallOfFameList, hallOfFameEmptyText, hallOfFameSummaryText) = BuildHallOfFameTab(tabPanels[1]);
         tattooGrid = BuildTattooGalleryTab(tabPanels[2]);
         milestonesText = BuildMilestonesTab(tabPanels[3]);
         recordsText = BuildRecordsTab(tabPanels[4]);
+        newsText = BuildNewsTab(tabPanels[5]);
+        highlightsText = BuildHighlightsTab(tabPanels[6]);
 
         ShowTab(0);
     }
@@ -112,20 +126,29 @@ public class CareerScreen : UIScreen
 
     // ---------- Part 3: Hall of Champions (cleaner display) ----------
 
-    (Transform, Text) BuildHallOfFameTab(Transform panel)
+    (Transform, Text, Text) BuildHallOfFameTab(Transform panel)
     {
         CreateSectionTitle(panel, "HALL OF CHAMPIONS", new Vector2(0.04f, 0.88f), new Vector2(0.96f, 1f));
 
-        var list = UIFactory.CreateContainer(panel, new Vector2(0.0f, 0.02f), new Vector2(1f, 0.85f));
+        // Milestone 49, Part 6: a one-line career summary above the list -
+        // championship/rival/mirror match counts, highest Prestige - all
+        // derived from existing data, no new records created.
+        var summary = UIFactory.CreateCaption(panel, "", new Vector2(0.04f, 0.78f), new Vector2(0.96f, 0.87f), TextAnchor.MiddleCenter);
+        summary.color = UIFactory.GoldColor;
+
+        var list = UIFactory.CreateContainer(panel, new Vector2(0.0f, 0.02f), new Vector2(1f, 0.76f));
         var empty = UIFactory.CreateCaption(panel, "No titles earned yet - get out there and fight!",
-            new Vector2(0.04f, 0.4f), new Vector2(0.96f, 0.5f), TextAnchor.MiddleCenter);
+            new Vector2(0.04f, 0.36f), new Vector2(0.96f, 0.46f), TextAnchor.MiddleCenter);
         empty.gameObject.SetActive(false);
-        return (list, empty);
+        return (list, empty, summary);
     }
 
     void RefreshHallOfFameTab()
     {
         var records = GM.HallOfChampions;
+        hallOfFameSummaryText.text = $"Championships: {GM.ChampionshipWinCount}   |   Rival Wins: {GM.RivalWinCount}   |   " +
+            $"Mirror Match Wins: {GM.MirrorMatchWinCount}   |   Highest Prestige: {PrestigeSystem.FormatLevel(GM.HighestPrestigeReached)}";
+
         hallOfFameEmptyText.gameObject.SetActive(records.Count == 0);
         if (records.Count == 0) return;
 
@@ -261,8 +284,15 @@ public class CareerScreen : UIScreen
     {
         CreateSectionTitle(panel, "CAREER MILESTONES", new Vector2(0.04f, 0.88f), new Vector2(0.96f, 1f));
         var card = UIFactory.CreateCard(panel, "Milestones", new Vector2(0.04f, 0.02f), new Vector2(0.96f, 0.85f));
-        return UIFactory.CreateText(card, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
+        var text = UIFactory.CreateText(card, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
             new Vector2(0.05f, 0.04f), new Vector2(0.95f, 0.96f));
+        // Milestone 53, Part 1: Lessons Learned adds several more lines below
+        // the existing milestones - same overflow safety net every other
+        // accumulator text in this UI already uses.
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 12;
+        text.resizeTextMaxSize = UIFactory.BodySize;
+        return text;
     }
 
     void RefreshMilestonesTab()
@@ -281,7 +311,44 @@ public class CareerScreen : UIScreen
             $"First Mirror Match Victory: {Describe(firstMirrorMatch, GM.HasDefeatedShadowChampion)}\n" +
             $"First Prestige: {Describe(firstPrestige, GM.PrestigeLevel > 0)}\n\n" +
             $"Highest Prestige Reached: {PrestigeSystem.FormatLevel(GM.HighestPrestigeReached)}\n" +
-            $"Game Completions: {GM.TotalGameCompletions}";
+            // Milestone 49, Part 2: both fully derived from Hall of Champions -
+            // no new save fields.
+            $"Total Championships Won: {GM.ChampionshipWinCount}\n" +
+            $"Game Completions: {GM.TotalGameCompletions}\n\n" +
+            BuildLessonsLearnedSection();
+    }
+
+    // Milestone 53 (Career Lessons Recap): reads GymInfo.LessonText (added in
+    // Milestone 52) and GM.IsGymCompleted (existing, completedGymIds-backed)
+    // directly - no new save fields, no second copy of the lesson text
+    // anywhere. Filtering on "has a LessonText" rather than a hardcoded gym
+    // list means Championship (which deliberately has none - it has its own
+    // screen and beat already) is automatically excluded, and any future
+    // lesson-bearing gym would automatically be included with no code change.
+    string BuildLessonsLearnedSection()
+    {
+        var lessonGyms = new List<GymInfo>();
+        foreach (var gym in GymDatabase.AllGyms)
+            if (!string.IsNullOrEmpty(gym.LessonText)) lessonGyms.Add(gym);
+
+        int completed = 0;
+        foreach (var gym in lessonGyms)
+            if (GM.IsGymCompleted(gym)) completed++;
+
+        // Milestone 53, Part 4: rich-text color tags - same pattern already
+        // used throughout BattleScreen's log - so completed/incomplete lines
+        // can carry the unified Gold/Locked-Bronze meaning within this one
+        // Text block, with no new dynamic UI elements.
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<b><color=#D8A63C>LESSONS LEARNED ({completed}/{lessonGyms.Count})</color></b>\n");
+        foreach (var gym in lessonGyms)
+        {
+            bool done = GM.IsGymCompleted(gym);
+            string hex = done ? "D8A63C" : "7A6652";
+            string status = done ? $"✓ {gym.LessonText}" : "Not learned yet";
+            sb.Append($"{gym.GymName}\n<color=#{hex}>{status}</color>\n");
+        }
+        return sb.ToString();
     }
 
     static ChampionRecord FindFirst(IReadOnlyList<ChampionRecord> records, System.Predicate<ChampionRecord> match)
@@ -303,20 +370,106 @@ public class CareerScreen : UIScreen
     {
         CreateSectionTitle(panel, "RECORD BOOK", new Vector2(0.04f, 0.88f), new Vector2(0.96f, 1f));
         var card = UIFactory.CreateCard(panel, "Records", new Vector2(0.04f, 0.02f), new Vector2(0.96f, 0.85f));
-        return UIFactory.CreateText(card, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
+        var text = UIFactory.CreateText(card, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
             new Vector2(0.05f, 0.04f), new Vector2(0.95f, 0.96f));
+        // Milestone 49, Part 1: significantly more lines than this card had
+        // before - same overflow safety net every other accumulator text in
+        // this UI already uses.
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 12;
+        text.resizeTextMaxSize = UIFactory.BodySize;
+        return text;
     }
 
     void RefreshRecordsTab()
     {
+        // Milestone 49, Part 1 (Combat Record Book): the previously
+        // "Future Expansion" critical-hit/combo lines are now real, tracked
+        // by BattleSystem and folded into GameManager every fight (see
+        // GameManager.EndBattle). Submission/Rival/Mirror Match/Street Fight
+        // wins all reuse existing data - no duplicate tracking.
         recordsText.text =
+            $"Total Critical Hits: {GM.TotalCriticalHits}\n" +
+            $"Most Critical Hits In One Fight: {GM.MostCriticalHitsInOneFight}\n" +
+            $"Total Combos Triggered: {GM.TotalCombosTriggered}\n" +
+            $"Most Combos In One Fight: {GM.MostCombosInOneFight}\n" +
+            $"Total Parries: {GM.TotalParries}\n" +
+            $"Successful Parries: {GM.SuccessfulParries}\n" +
+            $"Total Clinches: {GM.TotalClinches}\n" +
+            $"Total Takedowns Landed: {GM.TotalTakedownsLanded}\n" +
+            $"Total Submission Wins: {GM.SubmissionWins}\n" +
+            $"Street Fight Wins: {GM.StreetFightWins}\n" +
+            $"Rival Wins: {GM.RivalWinCount}\n" +
+            $"Mirror Match Wins: {GM.MirrorMatchWinCount}\n\n" +
             $"Longest Win Streak: {GM.BestWinStreak}\n" +
             $"Most Damage in a Single Hit: {GM.MaxSingleHitDamage}\n" +
             $"Most Fights Won: {GM.TotalWins}\n" +
-            $"Most Coins Earned (Lifetime): {GM.TotalCoinsEarned}\n" +
-            $"Most Submissions: {GM.SubmissionWins}\n\n" +
-            $"Most Critical Hits: Future Expansion\n" +
-            $"Most Combos Triggered: Future Expansion";
+            $"Most Coins Earned (Lifetime): {GM.TotalCoinsEarned}";
+    }
+
+    // ---------- Part 4: CCL News Feed ----------
+
+    Text BuildNewsTab(Transform panel)
+    {
+        CreateSectionTitle(panel, "CCL NEWS FEED", new Vector2(0.04f, 0.88f), new Vector2(0.96f, 1f));
+        var card = UIFactory.CreateCard(panel, "News", new Vector2(0.04f, 0.02f), new Vector2(0.96f, 0.85f));
+        var text = UIFactory.CreateText(card, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
+            new Vector2(0.05f, 0.04f), new Vector2(0.95f, 0.96f));
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 12;
+        text.resizeTextMaxSize = UIFactory.BodySize;
+        return text;
+    }
+
+    void RefreshNewsTab()
+    {
+        var headlines = NewsFeedGenerator.GenerateHeadlines(GM);
+        if (headlines.Count == 0)
+        {
+            newsText.text = "No news yet - get out there and make some.";
+            return;
+        }
+
+        int shown = Mathf.Min(headlines.Count, MaxNewsHeadlines);
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < shown; i++)
+        {
+            if (i > 0) sb.Append('\n');
+            sb.Append("- ").Append(headlines[i]);
+        }
+        newsText.text = sb.ToString();
+    }
+
+    // ---------- Part 4/5: Career Highlights Reel ----------
+
+    Text BuildHighlightsTab(Transform panel)
+    {
+        CreateSectionTitle(panel, "CAREER HIGHLIGHTS", new Vector2(0.04f, 0.88f), new Vector2(0.96f, 1f));
+        var card = UIFactory.CreateCard(panel, "Highlights", new Vector2(0.04f, 0.02f), new Vector2(0.96f, 0.85f));
+        var text = UIFactory.CreateText(card, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
+            new Vector2(0.05f, 0.04f), new Vector2(0.95f, 0.96f));
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 12;
+        text.resizeTextMaxSize = UIFactory.BodySize;
+        return text;
+    }
+
+    void RefreshHighlightsTab()
+    {
+        var highlights = CareerHighlightGenerator.GenerateHighlights(GM);
+        if (highlights.Count == 0)
+        {
+            highlightsText.text = "No major highlights yet - get out there and make history.";
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < highlights.Count; i++)
+        {
+            if (i > 0) sb.Append('\n');
+            sb.Append("- ").Append(highlights[i]);
+        }
+        highlightsText.text = sb.ToString();
     }
 
     public void Refresh()
@@ -329,6 +482,8 @@ public class CareerScreen : UIScreen
         RefreshTattooGalleryTab();
         RefreshMilestonesTab();
         RefreshRecordsTab();
+        RefreshNewsTab();
+        RefreshHighlightsTab();
 
         ShowTab(0);
     }

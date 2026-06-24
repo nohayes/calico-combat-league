@@ -76,8 +76,10 @@ public class ShopScreen : UIScreen
         label.resizeTextMaxSize = UIFactory.CaptionSize;
         dynamicEntries.Add(label.gameObject);
 
+        // Milestone 50, Part 5/6: was PositiveColor (green) - purchasing is
+        // an action, not a value comparison/reward.
         var buyButton = UIFactory.CreateButton(card, $"Buy {item.Cost}c", new Vector2(0.63f, 0.14f), new Vector2(0.97f, 0.86f),
-            () => { GM.BuyItem(item.Id); Refresh(); }, UIFactory.PositiveColor);
+            () => { GM.BuyItem(item.Id); Refresh(); }, UIFactory.AccentOrange);
         buyButton.interactable = GM.Player.Stats.Coins >= item.Cost;
         dynamicEntries.Add(buyButton.gameObject);
     }

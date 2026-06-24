@@ -6,6 +6,7 @@ public class HallOfChampionsScreen : UIScreen
 {
     readonly Transform listContainer;
     readonly Text emptyText;
+    readonly Text summaryText;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
 
     public HallOfChampionsScreen(Transform parent, GameManager gm) : base(parent, gm, "HallOfChampionsScreen", "gym_map")
@@ -13,7 +14,14 @@ public class HallOfChampionsScreen : UIScreen
         UIFactory.CreateHeading(Root.transform, "HALL OF CHAMPIONS", new Vector2(0.05f, 0.92f), new Vector2(0.95f, 0.99f));
 
         // Milestone 28: narrowed to a centered column (was edge-to-edge).
-        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.14f), new Vector2(0.85f, 0.9f));
+        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.15f, 0.14f), new Vector2(0.85f, 0.86f));
+
+        // Milestone 49, Part 6: a one-line career summary (championship/
+        // rival/mirror match counts, highest Prestige) above the
+        // chronological list - all derived from existing data, no new
+        // records created.
+        summaryText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.15f, 0.87f), new Vector2(0.85f, 0.91f), TextAnchor.MiddleCenter);
+        summaryText.color = UIFactory.GoldColor;
 
         emptyText = UIFactory.CreateCaption(Root.transform, "No champions yet - be the first!",
             new Vector2(0.15f, 0.45f), new Vector2(0.85f, 0.55f), TextAnchor.MiddleCenter);
@@ -31,6 +39,9 @@ public class HallOfChampionsScreen : UIScreen
         dynamicEntries.Clear();
 
         var records = GM.HallOfChampions;
+        summaryText.text = $"Championships: {GM.ChampionshipWinCount}   |   Rival Wins: {GM.RivalWinCount}   |   " +
+            $"Mirror Match Wins: {GM.MirrorMatchWinCount}   |   Highest Prestige: {PrestigeSystem.FormatLevel(GM.HighestPrestigeReached)}";
+
         emptyText.gameObject.SetActive(records.Count == 0);
         if (records.Count == 0) return;
 

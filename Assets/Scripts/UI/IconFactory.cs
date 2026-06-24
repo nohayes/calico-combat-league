@@ -25,10 +25,15 @@ public static class IconFactory
     {
         switch (type)
         {
-            case GymType.Boxing: return new Color(0.82f, 0.34f, 0.13f, 1f);
-            case GymType.MuayThai: return new Color(0.80f, 0.58f, 0.16f, 1f);
-            case GymType.Wrestling: return new Color(0.36f, 0.55f, 0.30f, 1f);
-            case GymType.BrazilianJiuJitsu: return new Color(0.33f, 0.42f, 0.66f, 1f);
+            // Milestone 51, Part 6: retuned to the brief's specified gym
+            // accents - this one function already drives gym cards, fighter
+            // portrait auras, archetype theming, and move-button colors
+            // everywhere, so this is the single highest-leverage "small
+            // visual cue" lever (no new UI, nothing else to touch).
+            case GymType.Boxing: return new Color(0.78f, 0.20f, 0.16f, 1f);          // Red/gold
+            case GymType.MuayThai: return new Color(0.85f, 0.55f, 0.15f, 1f);        // Orange/gold
+            case GymType.Wrestling: return new Color(0.35f, 0.48f, 0.60f, 1f);       // Blue/steel
+            case GymType.BrazilianJiuJitsu: return new Color(0.30f, 0.58f, 0.56f, 1f); // White/teal
             case GymType.Championship: return UIFactory.GoldColor;
             default: return UIFactory.AccentOrange;
         }
@@ -101,7 +106,11 @@ public static class IconFactory
             case MoveCategory.Finisher: return new Color(0.92f, 0.32f, 0.28f, 1f);
             case MoveCategory.Pressure: return UIFactory.AccentOrange;
             case MoveCategory.Control: return new Color(0.55f, 0.65f, 0.4f, 1f);
-            case MoveCategory.Submission: return new Color(0.68f, 0.42f, 0.88f, 1f);
+            // Milestone 50, Part 6: was an exact duplicate of
+            // RivalDatabase.AccentColor (0.68,0.42,0.88) - purple is reserved
+            // for Rival Scratch only under the unified palette, so Submission
+            // moves get their own distinct teal instead.
+            case MoveCategory.Submission: return new Color(0.22f, 0.58f, 0.6f, 1f);
             // Typography pass: PositiveColor is too dark/desaturated for
             // small text on the same near-black fill used everywhere this
             // tag appears - swapped for a brighter, equally distinct mint.

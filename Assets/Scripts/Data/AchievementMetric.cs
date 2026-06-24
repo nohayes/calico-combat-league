@@ -12,5 +12,13 @@ public enum AchievementMetric
     BecameChampion,
     DefeatedRival,
     DefeatedSecretFighter,
-    DefeatedMirrorMatch
+    DefeatedMirrorMatch,
+
+    // Milestone 49 (Achievement Expansion)
+    CombosTriggered,
+    Clinches,
+    Parries,
+    StreetFightWins,
+    HighestPrestigeReached,
+    WonWithOneHP
 }

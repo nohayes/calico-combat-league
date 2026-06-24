@@ -13,6 +13,14 @@ public class ChampionshipScreen : UIScreen
     readonly BattleFighterVisual championVisual;
     readonly RivalDialogueBox rivalDialogue;
 
+    // Milestone 58 (First Championship Reveal Moment). Heading/body are
+    // assigned inside BuildChampionshipRevealPanel(), not the constructor
+    // body itself, so they can't be readonly.
+    readonly RectTransform championshipRevealPanel;
+    Text championshipRevealHeading;
+    Text championshipRevealBody;
+    bool championshipRevealAdvanceRequested;
+
     public ChampionshipScreen(Transform parent, GameManager gm) : base(parent, gm, "ChampionshipScreen", "championship")
     {
         // Landscape Conversion: champion portrait moves out into its own
@@ -43,13 +51,60 @@ public class ChampionshipScreen : UIScreen
         infoGroup = infoCard.gameObject.AddComponent<CanvasGroup>();
         infoText = UIFactory.CreateText(infoCard, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.MiddleCenter,
             new Vector2(0.04f, 0.04f), new Vector2(0.97f, 0.96f));
+        // Milestone 60 (Release Audit): this accumulates several lines
+        // (name/archetype/level/wins, rival note, opponent's parting quote)
+        // with no overflow safety net - same protection every other
+        // accumulator text in this UI already has.
+        infoText.resizeTextForBestFit = true;
+        infoText.resizeTextMinSize = 14;
+        infoText.resizeTextMaxSize = UIFactory.BodySize;
 
+        // Milestone 50, Part 5/6: was PositiveColor (green) - a navigation
+        // action, not a value comparison/reward.
         UIFactory.CreateButton(Root.transform, "CONTINUE", new Vector2(0.40f, 0.02f), new Vector2(0.97f, 0.09f),
-            () => GM.ReturnToMap(), UIFactory.PositiveColor);
+            () => GM.ReturnToMap(), UIFactory.AccentOrange);
 
         // Milestone 39, Part 1: the storyline's big reveal - Scratch
         // interrupting what would otherwise read as "the end."
         rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
+
+        championshipRevealPanel = BuildChampionshipRevealPanel();
+    }
+
+    // Milestone 58, Part 2/8: same toggle-shown-panel approach as Milestone
+    // 57's Prestige reveal - not a new screen, not a new system. Centered
+    // card, Gold/MMA-Champ heading, Cream body, tap-anywhere-to-skip (same
+    // pattern BattleScreen's intro card and ProfileScreen's Prestige reveal
+    // both already use).
+    RectTransform BuildChampionshipRevealPanel()
+    {
+        var panel = UIFactory.CreateCard(Root.transform, "ChampionshipReveal", new Vector2(0.1f, 0.15f), new Vector2(0.9f, 0.85f),
+            new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.99f));
+
+        championshipRevealHeading = UIFactory.CreateText(panel, "", UIFactory.HeadingSize, UIFactory.GoldColor,
+            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.66f), new Vector2(0.96f, 0.92f), FontStyle.Bold);
+        championshipRevealHeading.resizeTextForBestFit = true;
+        championshipRevealHeading.resizeTextMinSize = 24;
+        championshipRevealHeading.resizeTextMaxSize = UIFactory.HeadingSize;
+        championshipRevealHeading.raycastTarget = false;
+
+        championshipRevealBody = UIFactory.CreateText(panel, "", UIFactory.BodySize, UIFactory.CreamColor,
+            TextAnchor.MiddleCenter, new Vector2(0.06f, 0.14f), new Vector2(0.94f, 0.64f));
+        championshipRevealBody.resizeTextForBestFit = true;
+        championshipRevealBody.resizeTextMinSize = 14;
+        championshipRevealBody.resizeTextMaxSize = UIFactory.BodySize;
+        championshipRevealBody.raycastTarget = false;
+
+        var tapPrompt = UIFactory.CreateCaption(panel, "Tap to continue", new Vector2(0.06f, 0.02f), new Vector2(0.94f, 0.11f), TextAnchor.MiddleCenter);
+        tapPrompt.raycastTarget = false;
+
+        var tapButton = panel.gameObject.AddComponent<Button>();
+        tapButton.transition = Selectable.Transition.None;
+        tapButton.targetGraphic = panel.GetComponent<Image>();
+        tapButton.onClick.AddListener(() => championshipRevealAdvanceRequested = true);
+
+        panel.gameObject.SetActive(false);
+        return panel;
     }
 
     public void Refresh()
@@ -88,14 +143,63 @@ public class ChampionshipScreen : UIScreen
         // waiting, reinforcing the showdown tease right after it.
         infoText.text += $"\n\nWord is {RivalDatabase.RivalName} already qualified for the Finals.";
 
-        // Milestone 39, Part 1: replaces the old static one-line tease
-        // (GetShowdownLine) with the real multi-stage arrival event - fires
-        // once, since this screen itself is only ever reached once per
-        // playthrough (becoming champion a second time routes to Victory,
-        // not here). Only relevant if the rival fight hasn't happened yet -
-        // a save that already defeated Scratch before reaching this screen
-        // for the first time (see GameManager's save-compatibility notes)
-        // skips the tease and goes straight to "you're the champion."
+        // Milestone 58, Part 3/7: ChampionshipWinCount==1 means the Hall of
+        // Champions entry RecordChampionLegacy just added (before this
+        // screen was reached) is the very first one ever, across every
+        // Prestige cycle - same gate Milestone 56 used for its inline
+        // "CAREER HIGHLIGHT" line, which this reveal now replaces rather
+        // than duplicates (Part 7 - no duplicate notifications).
+        bool firstChampionship = GM.ChampionshipWinCount == 1;
+        if (firstChampionship)
+        {
+            ShowChampionshipReveal(archetypeName);
+        }
+        // Milestone 39, Part 1: the real multi-stage rival arrival event -
+        // fires once per Prestige cycle's first championship win. Milestone
+        // 58: for a first-ever championship, deferred until the new reveal
+        // closes (see ChampionshipRevealRoutine) so the two beats don't
+        // visually collide; repeat-cycle championships keep this exact
+        // original immediate timing, unchanged.
+        else if (!GM.HasDefeatedRival)
+        {
+            RunAnimation(ShowRivalArrivalDelayed());
+        }
+    }
+
+    // Milestone 58, Part 1/4/6: the big "I became champion" moment - title,
+    // fighter identity, and a Hall of Champions callout, all concise.
+    void ShowChampionshipReveal(string archetypeName)
+    {
+        championshipRevealHeading.text = "UNDISPUTED CHAMPION\nCALICO COMBAT LEAGUE";
+        championshipRevealBody.text =
+            $"{GM.Player.Name}  -  {archetypeName}\n\n" +
+            "You conquered every gym.\n" +
+            "You defeated every leader.\n" +
+            "You reached the top.\n\n" +
+            "HALL OF CHAMPIONS ENTRY RECORDED";
+
+        championshipRevealPanel.gameObject.SetActive(true);
+        championshipRevealPanel.SetAsLastSibling();
+        PlayPulse(championshipRevealPanel, 1.05f, 0.5f);
+        // PlayChampionVictory() already fired at the top of Refresh() -
+        // its timing already lines up with this reveal appearing, so it
+        // isn't played a second time here.
+        RunAnimation(ChampionshipRevealRoutine());
+    }
+
+    IEnumerator ChampionshipRevealRoutine()
+    {
+        championshipRevealAdvanceRequested = false;
+        float elapsed = 0f;
+        // Part 2: target 3-5s - capped at the top of that range, or sooner via tap.
+        const float maxDuration = 4.5f;
+        while (!championshipRevealAdvanceRequested && elapsed < maxDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        championshipRevealPanel.gameObject.SetActive(false);
+
         if (!GM.HasDefeatedRival)
             RunAnimation(ShowRivalArrivalDelayed());
     }

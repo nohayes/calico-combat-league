@@ -88,6 +88,66 @@ public static class AchievementDatabase
             Description = "Know 8 or more moves at once.",
             Metric = AchievementMetric.MovesKnown,
             TargetValue = 8
+        },
+
+        // Milestone 49 (Achievement Expansion). "True Champion" (Defeat
+        // Mirror Match) already exists above as mirror_match_defeated - not
+        // duplicated here.
+        new AchievementData
+        {
+            Id = "combo_master",
+            Name = "Combo Master",
+            Description = "Land 100 combos over your career.",
+            Metric = AchievementMetric.CombosTriggered,
+            TargetValue = 100
+        },
+        new AchievementData
+        {
+            Id = "iron_chin",
+            Name = "Iron Chin",
+            Description = "Win a fight with exactly 1 HP remaining.",
+            Metric = AchievementMetric.WonWithOneHP,
+            TargetValue = 1
+        },
+        new AchievementData
+        {
+            Id = "road_warrior",
+            Name = "Road Warrior",
+            Description = "Win 100 Street Fights.",
+            Metric = AchievementMetric.StreetFightWins,
+            TargetValue = 100
+        },
+        new AchievementData
+        {
+            Id = "legend",
+            Name = "Legend",
+            Description = "Reach Prestige V.",
+            Metric = AchievementMetric.HighestPrestigeReached,
+            TargetValue = 5
+        },
+        new AchievementData
+        {
+            Id = "immortal",
+            Name = "Immortal",
+            Description = "Reach Prestige X.",
+            Metric = AchievementMetric.HighestPrestigeReached,
+            TargetValue = 10
+        },
+        new AchievementData
+        {
+            Id = "clinch_king",
+            Name = "Clinch King",
+            Description = "Clinch 100 times over your career.",
+            Metric = AchievementMetric.Clinches,
+            TargetValue = 100
+        },
+        new AchievementData
+        {
+            Id = "counter_fighter",
+            Name = "Counter Fighter",
+            Description = "Attempt 100 parries over your career.",
+            Metric = AchievementMetric.Parries,
+            TargetValue = 100
         }
     };
 

@@ -148,14 +148,17 @@ public class BattleScreen : UIScreen
 
         playerName = UIFactory.CreateText(playerInfo, "", UIFactory.SubheadingSize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
             new Vector2(0f, 0.62f), new Vector2(1f, 1f), FontStyle.Bold);
-        BuildStatRow(playerInfo, new Vector2(0f, 0.34f), new Vector2(1f, 0.6f), "HP", new Color(0.2f, 0.55f, 0.2f), out playerHealth, out playerHealthValue);
+        // Milestone 50, Part 8: unified to the same HealthColor the opponent's
+        // bar already uses (was a separate ad-hoc green) - one fighter's HP
+        // bar shouldn't be a different hue than the other's for the same stat.
+        BuildStatRow(playerInfo, new Vector2(0f, 0.34f), new Vector2(1f, 0.6f), "HP", HealthColor, out playerHealth, out playerHealthValue);
         BuildStatRow(playerInfo, new Vector2(0f, 0.06f), new Vector2(1f, 0.32f), "STM", StaminaColor, out playerStamina, out playerStaminaValue);
 
         playerEffectsText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.02f, 0.135f), new Vector2(0.34f, 0.153f));
         playerEffectsText.color = UIFactory.GoldColor;
 
         stageCard = UIFactory.CreateCard(Root.transform, "FightStage", new Vector2(0.02f, 0.32f), new Vector2(0.98f, 0.94f),
-            new Color(0.08f, 0.07f, 0.07f, 0.88f));
+            new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.88f));
         stageGroup = stageCard.gameObject.AddComponent<CanvasGroup>();
 
         var auraGo = new GameObject("ChampionAura", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -185,7 +188,7 @@ public class BattleScreen : UIScreen
         // shrunk slightly from the top to make room for the small "current
         // chain" readout just above it, without touching anything else's layout.
         UIFactory.CreateCard(Root.transform, "LogBackdrop", new Vector2(0.36f, 0.155f), new Vector2(0.64f, 0.275f),
-            new Color(0.06f, 0.05f, 0.05f, 0.88f));
+            new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.88f));
         // Milestone 28: bumped from CaptionSize - on a typical 16:9 laptop display
         // the canvas scale factor lands well under 1.0, so the log was reading
         // smaller than intended for the most important screen in the game.
@@ -205,8 +208,11 @@ public class BattleScreen : UIScreen
         // Milestone 30, Part 5: Recover spends the player's turn for a much
         // bigger stamina gain than passive regen alone - the counterweight to
         // the lowered regen rate below.
+        // Milestone 50, Part 5/6: was PositiveColor (green) - Recover is an
+        // action the player takes, not a stat comparison/reward/better
+        // value, so per the unified palette's rules it belongs on Orange.
         recoverButton = UIFactory.CreateButton(Root.transform, "RECOVER", new Vector2(0.54f, 0.115f), new Vector2(0.70f, 0.148f),
-            () => OnRecoverSelected(), UIFactory.PositiveColor);
+            () => OnRecoverSelected(), UIFactory.AccentOrange);
 
         // Milestone 40, Part 1: PARRY/CLINCH - two universal defensive actions
         // sitting in the side margins of the same button row (0.02-0.30 and
@@ -236,7 +242,8 @@ public class BattleScreen : UIScreen
         }
 
         introCard = UIFactory.CreateCard(Root.transform, "FightIntroduction",
-            new Vector2(0.06f, 0.155f), new Vector2(0.94f, 0.94f), new Color(0.08f, 0.07f, 0.07f, 0.98f));
+            new Vector2(0.06f, 0.155f), new Vector2(0.94f, 0.94f),
+            new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.98f));
         introGroup = introCard.gameObject.AddComponent<CanvasGroup>();
 
         // Tap-to-skip: the card itself is a Button, but every child Graphic inside it
@@ -331,8 +338,10 @@ public class BattleScreen : UIScreen
 
         // Milestone 36, Part 1/9: the only explicit "click to proceed" gate in
         // the whole intro - shown solely during the Tale of the Tape beat.
+        // Milestone 50, Part 5/6: was PositiveColor (green) - this is the
+        // intro's "click to proceed" action, not a value comparison/reward.
         introContinueButton = UIFactory.CreateButton(introCard, "CONTINUE", new Vector2(0.36f, 0.025f), new Vector2(0.64f, 0.11f),
-            () => introContinueClicked = true, UIFactory.PositiveColor);
+            () => introContinueClicked = true, UIFactory.AccentOrange);
         introContinueButton.gameObject.SetActive(false);
 
         introText = UIFactory.CreateText(introCard, "", UIFactory.SubheadingSize, UIFactory.CreamColor,
@@ -553,8 +562,18 @@ public class BattleScreen : UIScreen
         bool leaderFight = IsLeaderFight() && !championship;
         bool rematch = leaderFight && GM.HasBecomeChampion();
 
-        introBillingText.text = GetFightBilling();
-        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight(), IsRivalFight(), introMirrorFight);
+        // Milestone 56, Part 1/2/7: the event name + event type now lead the
+        // existing billing text (was just GetFightBilling() alone) - same
+        // Gold/MMA-Champ text element, same reveal timing, no new UI. The
+        // existing GetFightBilling()/GetFightAnnouncement() lines still
+        // follow exactly as before, so this only adds two lines on top.
+        introBillingText.text = $"{FightPromotionGenerator.GetEventName(GM)}\n{FightPromotionGenerator.GetEventType(GM)}\n{GetFightBilling()}";
+        // Milestone 56, Part 3: a brief walkout line (role + name + record)
+        // for major fights only - prepended onto the existing announcement
+        // text, same element, same timing, no new beat/delay.
+        string walkout = GetWalkoutLine();
+        string announcement = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight(), IsRivalFight(), introMirrorFight);
+        introAnnouncementText.text = string.IsNullOrEmpty(walkout) ? announcement : $"{walkout}\n{announcement}";
         introText.text = "";
         introMatchupGroup.gameObject.SetActive(true);
         introTapeGroup.gameObject.SetActive(false);
@@ -749,11 +768,20 @@ public class BattleScreen : UIScreen
         // Typography pass: UIFactory.PositiveColor/DangerColor are tuned for
         // button backgrounds, not small text on the same near-black fill -
         // too dark to read at a glance, which defeats the point of a
-        // scannable better/worse comparison. Brighter, saturated variants
-        // used here only, for this comparison table specifically.
+        // scannable better/worse comparison. Milestone 50, Part 5/9: derived
+        // (brightened) from those same unified theme constants instead of
+        // fully independent values, so this stays in the same Green/Red
+        // family as every other stat-comparison use in the game while
+        // keeping the contrast boost small text on a dark fill needs.
         Color neutral = UIFactory.CreamColor;
-        Color better = new Color(0.4f, 0.85f, 0.4f, 1f);
-        Color worse = new Color(0.95f, 0.35f, 0.3f, 1f);
+        Color better = new Color(
+            Mathf.Min(1f, UIFactory.PositiveColor.r * 1.3f),
+            Mathf.Min(1f, UIFactory.PositiveColor.g * 1.3f),
+            Mathf.Min(1f, UIFactory.PositiveColor.b * 1.3f), 1f);
+        Color worse = new Color(
+            Mathf.Min(1f, UIFactory.DangerColor.r * 1.2f),
+            Mathf.Min(1f, UIFactory.DangerColor.g * 1.2f),
+            Mathf.Min(1f, UIFactory.DangerColor.b * 1.2f), 1f);
 
         if (playerValue > opponentValue) { tapePlayerValues[index].color = better; tapeOpponentValues[index].color = worse; }
         else if (playerValue < opponentValue) { tapePlayerValues[index].color = worse; tapeOpponentValues[index].color = better; }
@@ -952,6 +980,36 @@ public class BattleScreen : UIScreen
         for (int i = 0; i < log.Count; i++)
             if (log[i].StartsWith(fighterName) && (log[i].Contains("PARRY!") || log[i].Contains("CLINCH SUCCESS!"))) return true;
         return false;
+    }
+
+    // Milestone 56, Part 3 (Walkouts): a short role/name/record line for the
+    // 4 fight categories the brief calls out (gym leader, championship,
+    // rival, mirror match) - empty for everything else (regular trainers,
+    // Street Fight), since walkouts are explicitly major-fights-only. Reuses
+    // FightPresentationGenerator's existing deterministic record generators
+    // (Milestone 36) - no new data, no new save fields.
+    string GetWalkoutLine()
+    {
+        if (GM.CurrentOpponentInfo == null || GM.CurrentOpponent == null) return "";
+
+        if (IsMirrorMatch())
+        {
+            FightPresentationGenerator.GetSpecialOpponentRecord(GM.CurrentOpponentInfo.OpponentId, out int w, out int l, out _);
+            return $"THE REFLECTION\n{GM.CurrentOpponent.Name}  -  Record {w}-{l}";
+        }
+        if (IsRivalFight())
+        {
+            FightPresentationGenerator.GetRivalRecord(GM, out int w, out int l, out _);
+            return $"THE RIVAL\n{RivalDatabase.RivalName}  -  Record {w}-{l}";
+        }
+        bool isLeader = IsLeaderFight();
+        if (isLeader && GM.CurrentGym != null)
+        {
+            bool championship = GM.CurrentGym.GymType == GymType.Championship;
+            FightPresentationGenerator.GetGymOpponentRecord(GM.CurrentGym.GymType, true, GM.CurrentOpponentInfo.OpponentId, out int w, out int l, out _);
+            return $"{(championship ? "THE CHAMPION" : "THE GYM LEADER")}\n{GM.CurrentOpponent.Name}  -  Record {w}-{l}";
+        }
+        return "";
     }
 
     string GetFightBilling()
@@ -1279,8 +1337,10 @@ public class BattleScreen : UIScreen
             float yMax = 1f - i * slotHeight - padding;
             float yMin = 1f - (i + 1) * slotHeight + padding;
 
+            // Milestone 50, Part 5/6: was PositiveColor (green) - using an
+            // item is an action, not a value comparison/reward.
             var button = UIFactory.CreateButton(itemContainer, $"{entry.Item.Name} x{entry.Quantity}",
-                new Vector2(0.05f, yMin), new Vector2(0.95f, yMax), () => OnItemSelected(entry.Item.Id), UIFactory.PositiveColor);
+                new Vector2(0.05f, yMin), new Vector2(0.95f, yMax), () => OnItemSelected(entry.Item.Id), UIFactory.AccentOrange);
             itemEntries.Add(button.gameObject);
         }
     }
@@ -1593,7 +1653,13 @@ public class BattleScreen : UIScreen
 
     void ShowHealFeedback(int amount)
     {
-        playerFx.SpawnPopup($"+{amount}", new Color(0.4f, 0.85f, 0.4f), false);
+        // Milestone 50, Part 5: a healed amount is exactly the "positive
+        // value" case the unified Green is for - same brightened-PositiveColor
+        // derivation as the Tale of the Tape's better/worse comparison.
+        playerFx.SpawnPopup($"+{amount}", new Color(
+            Mathf.Min(1f, UIFactory.PositiveColor.r * 1.3f),
+            Mathf.Min(1f, UIFactory.PositiveColor.g * 1.3f),
+            Mathf.Min(1f, UIFactory.PositiveColor.b * 1.3f)), false);
         playerFx.Flash(HealFlashColor);
     }
 

@@ -14,6 +14,11 @@ public class FighterData
     // completely unchanged. Only Rival Scratch sets this to true.
     public bool IsSmartFighter;
 
+    // Milestone 51, Part 3/5: forwarded from OpponentInfo.DefenseBiasPercent
+    // the same way IsSmartFighter is - 0 (no change) for every existing
+    // fighter except Wrestling gym opponents.
+    public int DefenseBiasPercent;
+
     public FighterData(string name, FighterStats stats, List<MoveData> knownMoves, List<MoveData> equippedMoves = null)
     {
         Name = name;

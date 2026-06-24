@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,11 +13,26 @@ public class ProfileScreen : UIScreen
     readonly Button prestigeButton;
     readonly RectTransform prestigeConfirmPanel;
 
+    // Milestone 57 (Prestige Reveal Moment). The heading/body Text fields
+    // are assigned inside BuildPrestigeRevealPanel() (not the constructor
+    // body itself), so they can't be readonly - same reasoning as every
+    // other Build*Tab-style helper in this codebase that assigns fields.
+    readonly RectTransform prestigeRevealPanel;
+    Text prestigeRevealHeading;
+    Text prestigeRevealBody;
+    bool prestigeRevealAdvanceRequested;
+
     public ProfileScreen(Transform parent, GameManager gm) : base(parent, gm, "ProfileScreen", "gym_map")
     {
         UIFactory.CreateHeading(Root.transform, "FIGHTER PROFILE", new Vector2(0.05f, 0.92f), new Vector2(0.95f, 0.99f));
 
-        portraitFrame = UIFactory.CreateCard(Root.transform, "Portrait", new Vector2(0.06f, 0.74f), new Vector2(0.28f, 0.91f), UIFactory.BackgroundColor);
+        // Overnight Audit (Avatar Presentation): widened/heightened from
+        // (0.06,0.74)-(0.28,0.91) - this portrait read as noticeably cramped
+        // next to every other "hero" portrait context (Victory/Defeat/Battle
+        // all run 35-44% width). Freed the space below/right of it by
+        // narrowing flavorQuoteText to share headerText's column instead of
+        // spanning the full width underneath the portrait.
+        portraitFrame = UIFactory.CreateCard(Root.transform, "Portrait", new Vector2(0.06f, 0.68f), new Vector2(0.30f, 0.91f), UIFactory.BackgroundColor);
 
         var portraitGo = new GameObject("PortraitImage", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         portraitGo.transform.SetParent(portraitFrame, false);
@@ -29,10 +45,13 @@ public class ProfileScreen : UIScreen
         portraitImage.preserveAspect = true;
 
         headerText = UIFactory.CreateText(Root.transform, "", UIFactory.SubheadingSize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
-            new Vector2(0.31f, 0.74f), new Vector2(0.94f, 0.91f), FontStyle.Bold);
+            new Vector2(0.33f, 0.74f), new Vector2(0.94f, 0.91f), FontStyle.Bold);
 
+        // Narrowed to share headerText's column (was 0.06-0.94, spanning
+        // underneath the portrait) so the portrait above can extend down
+        // into the freed space without colliding with this band.
         flavorQuoteText = UIFactory.CreateText(Root.transform, "", UIFactory.CaptionSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
-            new Vector2(0.06f, 0.68f), new Vector2(0.94f, 0.73f), FontStyle.Italic);
+            new Vector2(0.33f, 0.68f), new Vector2(0.94f, 0.73f), FontStyle.Italic);
         // Quick Fix (Font Replacement Pass), Part 5: archetype flavor quotes
         // sit in a very short single-line band - AtkinsonHyperlegible-Bold's glyphs
         // raise the odds of wrapping past this box's height.
@@ -47,6 +66,13 @@ public class ProfileScreen : UIScreen
         UIFactory.CreateCard(Root.transform, "Status", new Vector2(0.06f, 0.16f), new Vector2(0.94f, 0.3f));
         statusText = UIFactory.CreateText(Root.transform, "", UIFactory.BodySize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.08f, 0.17f), new Vector2(0.92f, 0.29f), FontStyle.Bold);
+        // Milestone 60 (Release Audit): 3 dense lines (champion/Prestige
+        // status, rival name/archetype/status, record/motto) in a tight
+        // band with no overflow safety net - same protection every other
+        // multi-line text in this UI already has.
+        statusText.resizeTextForBestFit = true;
+        statusText.resizeTextMinSize = 14;
+        statusText.resizeTextMaxSize = UIFactory.BodySize;
 
         // Profile is the management hub: Stats, Moves, Career, and Hall of
         // Fame are all reachable from here (Hall of Fame and Moves no longer
@@ -76,6 +102,7 @@ public class ProfileScreen : UIScreen
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
 
         prestigeConfirmPanel = BuildPrestigeConfirmPanel();
+        prestigeRevealPanel = BuildPrestigeRevealPanel();
     }
 
     // Milestone 45, Part 4: a major, irreversible action - requires an
@@ -96,10 +123,48 @@ public class ProfileScreen : UIScreen
         UIFactory.CreateText(panel, "RESET:  Gym Progress, Defeated Opponents, Championship Progress,\nRival Progress, Mirror Match Progress, Current Run Progress",
             UIFactory.CaptionSize, UIFactory.DangerColor, TextAnchor.MiddleCenter, new Vector2(0.06f, 0.32f), new Vector2(0.94f, 0.56f));
 
+        // Milestone 57, Part 1/7: CONFIRM now leads into the reveal instead
+        // of immediately refreshing/returning - PerformPrestige() itself no
+        // longer changes state (see GameManager), so this screen stays
+        // visible underneath the reveal panel until that panel closes.
         UIFactory.CreateButton(panel, "CONFIRM", new Vector2(0.1f, 0.06f), new Vector2(0.46f, 0.22f),
-            () => { GM.PerformPrestige(); HidePrestigeConfirm(); Refresh(); }, UIFactory.DangerColor);
+            () => { GM.PerformPrestige(); HidePrestigeConfirm(); ShowPrestigeReveal(); }, UIFactory.DangerColor);
         UIFactory.CreateButton(panel, "CANCEL", new Vector2(0.54f, 0.06f), new Vector2(0.9f, 0.22f),
             () => HidePrestigeConfirm(), UIFactory.SecondaryColor, isBackAction: true);
+
+        panel.gameObject.SetActive(false);
+        return panel;
+    }
+
+    // Milestone 57 (Prestige Reveal Moment): a short, skippable beat between
+    // confirming Prestige and landing back on Gym Map - same toggle-shown-
+    // panel pattern as the confirm panel above, not a new screen. Tap
+    // anywhere to continue early, same as BattleScreen's intro card.
+    RectTransform BuildPrestigeRevealPanel()
+    {
+        var panel = UIFactory.CreateCard(Root.transform, "PrestigeReveal", new Vector2(0.12f, 0.2f), new Vector2(0.88f, 0.8f),
+            new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.99f));
+
+        prestigeRevealHeading = UIFactory.CreateText(panel, "", UIFactory.SubheadingSize, UIFactory.GoldColor,
+            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.74f), new Vector2(0.96f, 0.92f), FontStyle.Bold);
+        prestigeRevealHeading.raycastTarget = false;
+
+        prestigeRevealBody = UIFactory.CreateText(panel, "", UIFactory.BodySize, UIFactory.CreamColor,
+            TextAnchor.MiddleCenter, new Vector2(0.06f, 0.16f), new Vector2(0.94f, 0.72f));
+        prestigeRevealBody.resizeTextForBestFit = true;
+        prestigeRevealBody.resizeTextMinSize = 14;
+        prestigeRevealBody.resizeTextMaxSize = UIFactory.BodySize;
+        prestigeRevealBody.raycastTarget = false;
+
+        var tapPrompt = UIFactory.CreateCaption(panel, "Tap to continue", new Vector2(0.06f, 0.03f), new Vector2(0.94f, 0.12f), TextAnchor.MiddleCenter);
+        tapPrompt.raycastTarget = false;
+
+        // The whole card is the tap-to-skip target - same approach
+        // BattleScreen's intro card uses for tap-anywhere-to-continue.
+        var tapButton = panel.gameObject.AddComponent<Button>();
+        tapButton.transition = Selectable.Transition.None;
+        tapButton.targetGraphic = panel.GetComponent<Image>();
+        tapButton.onClick.AddListener(() => prestigeRevealAdvanceRequested = true);
 
         panel.gameObject.SetActive(false);
         return panel;
@@ -113,6 +178,47 @@ public class ProfileScreen : UIScreen
     }
 
     void HidePrestigeConfirm() => prestigeConfirmPanel.gameObject.SetActive(false);
+
+    // Milestone 57, Part 2/3/4/5: the actual reveal - dynamic Prestige level
+    // via the existing PrestigeSystem.FormatLevel (no duplicated roman
+    // numeral logic), concise keep/reset text, and a reused existing sound
+    // cue. Target 2-4s, capped here at 3.5s, or sooner via tap.
+    void ShowPrestigeReveal()
+    {
+        prestigeRevealHeading.text = $"{PrestigeSystem.FormatLevel(GM.PrestigeLevel)} ACHIEVED";
+        prestigeRevealBody.text =
+            "A new league begins.\n\n" +
+            "Your legacy remains.\n" +
+            "The opponents are stronger.\n" +
+            "The climb starts again.";
+
+        prestigeRevealPanel.gameObject.SetActive(true);
+        prestigeRevealPanel.SetAsLastSibling();
+        PlayPulse(prestigeRevealPanel, 1.05f, 0.5f);
+        // Reuses an existing celebratory cue rather than adding a new clip -
+        // PlayLevelUp is already this game's "personal achievement" sound
+        // (Milestones 50/56), distinct from PlayChampionVictory's specific
+        // "became champion" meaning.
+        AudioManager.Instance?.PlayLevelUp();
+        RunAnimation(PrestigeRevealRoutine());
+    }
+
+    IEnumerator PrestigeRevealRoutine()
+    {
+        prestigeRevealAdvanceRequested = false;
+        float elapsed = 0f;
+        const float maxDuration = 3.5f;
+        while (!prestigeRevealAdvanceRequested && elapsed < maxDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        prestigeRevealPanel.gameObject.SetActive(false);
+        Refresh();
+        // Milestone 57, Part 1/7: the reveal owns this transition now that
+        // PerformPrestige() no longer changes state itself.
+        GM.ChangeState(GameState.GymMap);
+    }
 
     public void Refresh()
     {
@@ -144,6 +250,11 @@ public class ProfileScreen : UIScreen
         // panel) once Mirror Match is actually defeated.
         prestigeButton.interactable = GM.CanPrestige;
         HidePrestigeConfirm();
+        // Milestone 57: defensive, same reasoning as HidePrestigeConfirm()
+        // above - the reveal's own routine already hides itself before
+        // calling Refresh(), but this guards against ever re-entering this
+        // screen with it still showing.
+        prestigeRevealPanel.gameObject.SetActive(false);
 
         int unlockedAchievements = 0;
         foreach (var a in AchievementDatabase.All) if (GM.IsAchievementUnlocked(a.Id)) unlockedAchievements++;
