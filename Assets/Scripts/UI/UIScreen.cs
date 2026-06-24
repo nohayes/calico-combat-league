@@ -34,6 +34,12 @@ public abstract class UIScreen
         }
     }
 
+    // Quick Fix (Global Audio Settings Button): lets a screen shown as an
+    // overlay on top of whatever's currently active (rather than via a real
+    // GameManager.ChangeState) guarantee it renders above it, regardless of
+    // each screen's fixed construction order under UIManager.
+    public void BringToFront() => Root.transform.SetAsLastSibling();
+
     // Lets subclasses (e.g. the Championship screen) trigger a one-off celebration burst.
     protected void PlayCelebration(int pieceCount = 16) => transitionRunner.SpawnConfetti(Root.transform, pieceCount);
     protected void RunAnimation(IEnumerator routine) => transitionRunner.Run(routine);

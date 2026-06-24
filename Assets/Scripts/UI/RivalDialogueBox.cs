@@ -37,6 +37,12 @@ public class RivalDialogueBox : MonoBehaviour
         if (lines == null || lines.Count == 0) return;
         StopAllCoroutines();
 
+        // Gym Selection Redesign: screens that add dynamic content directly
+        // under Root (rather than into a fixed container created before this
+        // dialogue box) can end up adding siblings after this one, which would
+        // otherwise render on top of it. Always claim the front when shown.
+        transform.SetAsLastSibling();
+
         // Milestone 33, Part 9 wanted "a rival intro sound if available" and
         // reused the crit stinger as a placeholder since no dedicated asset
         // existed yet. Milestone 35, Part 7: rival_encounter.mp3 now exists -

@@ -13,16 +13,10 @@ public class StatsScreen : UIScreen
     readonly Text headerText;
     readonly Transform statsContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
-    readonly Image avatarImage;
-    readonly PlayerAvatarVisual avatarVisual;
 
     public StatsScreen(Transform parent, GameManager gm) : base(parent, gm, "StatsScreen", "gym_map")
     {
         UIFactory.CreateHeading(Root.transform, "FIGHTER STATS", new Vector2(0.05f, 0.92f), new Vector2(0.76f, 0.99f));
-
-        // Milestone 25, Part 4: small fighter-identity badge.
-        var avatarMarker = UIFactory.CreateAvatarMarker(Root.transform, "Player", new Vector2(0.79f, 0.92f), new Vector2(0.95f, 0.99f), out avatarImage);
-        avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
 
         // Milestone 28: narrowed to a centered column (was edge-to-edge, a
         // portrait-era width that reads as an empty stretched strip on 16:9).
@@ -50,9 +44,6 @@ public class StatsScreen : UIScreen
         var stats = GM.Player.Stats;
         headerText.text =
             $"Level {stats.Level}    XP: {stats.XP} / {stats.XPToNextLevel}\nCoins: {stats.Coins}    Stat Points: {stats.StatPoints}";
-
-        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
-        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
 
         for (int i = 0; i < AllStats.Length; i++)
         {

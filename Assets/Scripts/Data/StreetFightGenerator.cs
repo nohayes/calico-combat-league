@@ -49,10 +49,12 @@ public static class StreetFightGenerator
     {
         var rng = new System.Random();
 
-        // Quick Fix (Secret Fighter): only rollable after the player has
-        // actually become champion, and even then only ~8% of the time -
-        // "very rare," not a guaranteed unlock.
-        if (gm != null && gm.HasBecomeChampion() && rng.Next(0, 100) < SecretFighterChancePercent)
+        // Milestone 39, Part 8: gate moved from "became champion" to "defeated
+        // Rival Scratch" - the Rival Showdown is now the league's true final
+        // test, so this post-game secret is its payoff instead of the
+        // Championship's. Still only ~8% of the time - "very rare," not a
+        // guaranteed unlock.
+        if (gm != null && gm.HasDefeatedRival && rng.Next(0, 100) < SecretFighterChancePercent)
             return GenerateSecretFighter(gm, rng);
 
         var difficulty = RollDifficulty(gm?.TotalGymsCleared ?? 0, rng);

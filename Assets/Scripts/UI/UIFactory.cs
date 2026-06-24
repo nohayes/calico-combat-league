@@ -27,11 +27,57 @@ public static class UIFactory
     static Font builtinFont;
     static Font BuiltinFont => builtinFont ??= Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+    // Font System Overhaul: three themed fonts loaded once, with the same
+    // null-safe Resources.Load pattern ArtRegistry/AudioManager already use -
+    // a missing font file just means CreateText below falls back to
+    // BuiltinFont, never a null reference (Part 10).
+    // Quick Fix (Font Replacement Pass): Poppin-Regular -> PatrickHandSC-Regular
+    // and Super Jumbo -> ProtestGuerrilla-Regular. Both DialogueFont and UiFont
+    // are the single chokepoint every screen already flows through (via
+    // GetFontForSize below, plus the handful of explicit .font = DialogueFont/
+    // UiFont overrides elsewhere), so swapping the two Resources.Load paths
+    // here is the entire replacement - no per-screen changes needed.
+    static Font dialogueFont;
+    public static Font DialogueFont => dialogueFont ??= (Resources.Load<Font>("Fonts/PatrickHandSC-Regular") ?? BuiltinFont);
+
+    static Font uiFont;
+    public static Font UiFont => uiFont ??= (Resources.Load<Font>("Fonts/ProtestGuerrilla-Regular") ?? BuiltinFont);
+
+    static Font headlineFont;
+    public static Font HeadlineFont => headlineFont ??= (Resources.Load<Font>("Fonts/MMA champ") ?? BuiltinFont);
+
+    // Part 5 hierarchy, applied globally by inferring intent from the size
+    // constant every CreateText call already passes in - this is the "one
+    // central place" Part 1 asks for, instead of touching every screen.
+    // MMA Champ = most important (Heading, and Subheading's mostly-dramatic
+    // default uses - VS, fight billing, hype beats). ProtestGuerrilla = buttons/UI.
+    // PatrickHandSC = body/caption reading text. Unrecognized/ad-hoc sizes (e.g.
+    // BattleScreen's intro dialogue beat, which temporarily resizes the same
+    // Text a few points larger) fall back to PatrickHandSC as the safer, more
+    // readable default - call sites that need MMA Champ for a non-standard
+    // size can still set .font explicitly afterward.
+    static Font GetFontForSize(int fontSize)
+    {
+        if (fontSize == HeadingSize) return HeadlineFont;
+        if (fontSize == SubheadingSize) return HeadlineFont;
+        if (fontSize == ButtonTextSize) return UiFont;
+        if (fontSize == BodySize) return DialogueFont;
+        if (fontSize == CaptionSize) return DialogueFont;
+        return DialogueFont;
+    }
+
     static Sprite roundedSprite;
     static Sprite RoundedSprite => roundedSprite ??= GenerateRoundedSprite();
 
     static Sprite circleSprite;
     public static Sprite CircleSprite => circleSprite ??= GenerateCircleSprite();
+
+    // Character Creation Redesign: a true soft radial falloff (not the hard
+    // edge CircleSprite has) for spotlight/glow effects - tint via Image.color,
+    // size via the RectTransform, same cached-sprite pattern as every other
+    // procedural sprite here.
+    static Sprite glowSprite;
+    public static Sprite GlowSprite => glowSprite ??= GenerateGlowSprite();
 
     // ---------- Panels & containers ----------
 
@@ -89,7 +135,7 @@ public static class UIFactory
         rt.offsetMax = Vector2.zero;
 
         var text = go.AddComponent<Text>();
-        text.font = BuiltinFont;
+        text.font = GetFontForSize(fontSize);
         text.text = content;
         text.fontSize = fontSize;
         text.fontStyle = fontStyle;
@@ -107,11 +153,30 @@ public static class UIFactory
     public static Text CreateSubheading(Transform parent, string content, Vector2 anchorMin, Vector2 anchorMax) =>
         CreateText(parent, content, SubheadingSize, CreamColor, TextAnchor.MiddleCenter, anchorMin, anchorMax, FontStyle.Bold);
 
-    public static Text CreateBody(Transform parent, string content, Vector2 anchorMin, Vector2 anchorMax, TextAnchor alignment = TextAnchor.MiddleLeft) =>
-        CreateText(parent, content, BodySize, CreamColor, alignment, anchorMin, anchorMax);
+    // Quick Fix (Font Replacement Pass), Part 5: these two helpers are exactly
+    // the "reading text" category (descriptions, flavor quotes, tips) most at
+    // risk from PatrickHandSC-Regular's wider, handwritten glyph metrics, and
+    // they're already the shared chokepoint most screens use for that content.
+    // Best-fit only ever shrinks text that wouldn't otherwise fit - anything
+    // that already fit at the requested size renders identically, so this is
+    // a safe default rather than a visual change.
+    public static Text CreateBody(Transform parent, string content, Vector2 anchorMin, Vector2 anchorMax, TextAnchor alignment = TextAnchor.MiddleLeft)
+    {
+        var text = CreateText(parent, content, BodySize, CreamColor, alignment, anchorMin, anchorMax);
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 12;
+        text.resizeTextMaxSize = BodySize;
+        return text;
+    }
 
-    public static Text CreateCaption(Transform parent, string content, Vector2 anchorMin, Vector2 anchorMax, TextAnchor alignment = TextAnchor.MiddleLeft) =>
-        CreateText(parent, content, CaptionSize, MutedTextColor, alignment, anchorMin, anchorMax);
+    public static Text CreateCaption(Transform parent, string content, Vector2 anchorMin, Vector2 anchorMax, TextAnchor alignment = TextAnchor.MiddleLeft)
+    {
+        var text = CreateText(parent, content, CaptionSize, MutedTextColor, alignment, anchorMin, anchorMax);
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = 9;
+        text.resizeTextMaxSize = CaptionSize;
+        return text;
+    }
 
     // ---------- Buttons ----------
 
@@ -158,6 +223,49 @@ public static class UIFactory
         text.resizeTextForBestFit = true;
         text.resizeTextMinSize = 14;
         text.resizeTextMaxSize = ButtonTextSize;
+
+        return btn;
+    }
+
+    // Gym Selection Redesign: the same interactive shell as CreateButton
+    // (hover/press tint, ButtonPunch scale, click sound, disabled dimming)
+    // but without the auto-generated centered label - for composite cards
+    // that build their own child layout (icon, name, tagline, description,
+    // badge) instead of a single auto-fit string.
+    public static Button CreateCardButton(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax,
+        UnityEngine.Events.UnityAction onClick, Color? color = null)
+    {
+        var go = new GameObject(SanitizeName("Card_" + name), typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var image = go.GetComponent<Image>();
+        image.sprite = RoundedSprite;
+        image.type = Image.Type.Sliced;
+        image.color = color ?? AccentOrange;
+
+        var btn = go.GetComponent<Button>();
+        btn.targetGraphic = image;
+        go.AddComponent<ButtonPunch>();
+
+        var colors = btn.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
+        colors.pressedColor = new Color(0.72f, 0.72f, 0.72f, 1f);
+        colors.selectedColor = Color.white;
+        colors.disabledColor = new Color(0.45f, 0.45f, 0.45f, 0.55f);
+        colors.fadeDuration = 0.08f;
+        btn.colors = colors;
+
+        btn.onClick.AddListener(() =>
+        {
+            AudioManager.Instance?.PlayClick();
+            onClick?.Invoke();
+        });
 
         return btn;
     }
@@ -327,15 +435,41 @@ public static class UIFactory
         CreatePatch(innerGo.transform, new Vector2(0.66f, 0.34f), 0.42f, CreamColor);
         CreatePatch(innerGo.transform, new Vector2(0.40f, 0.28f), 0.34f, new Color(0.08f, 0.07f, 0.07f));
 
-        CreateText(root, "CALICO COMBAT LEAGUE", Mathf.RoundToInt(HeadingSize * fontScale), GoldColor, TextAnchor.MiddleCenter,
+        // Font System Overhaul: explicit override - the scaled size here
+        // (HeadingSize * fontScale) won't exactly match HeadingSize, so the
+        // global size-based inference can't catch it. Only reachable when no
+        // banner.png exists (see the early-return above), but the game's own
+        // wordmark should always be the signature font regardless.
+        var wordmarkText = CreateText(root, "CALICO COMBAT LEAGUE", Mathf.RoundToInt(HeadingSize * fontScale), GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0f, 0.18f), new Vector2(1f, 0.43f), FontStyle.Bold);
+        wordmarkText.font = HeadlineFont;
+        // Font Size Fix: this band is only ~25% of an already-short header
+        // container, the tightest fit of anywhere HeadingSize is used - with
+        // HeadingSize now larger, best-fit keeps it from overflowing while
+        // still rendering as large as the band allows (likely still bigger
+        // than before in most cases).
+        wordmarkText.resizeTextForBestFit = true;
+        wordmarkText.resizeTextMinSize = 18;
+        wordmarkText.resizeTextMaxSize = Mathf.RoundToInt(HeadingSize * fontScale);
 
         // Small glove-like accents bracketing the wordmark for an MMA feel.
         CreateGloveDot(root, new Vector2(0.07f, 0.235f), 26f * scale);
         CreateGloveDot(root, new Vector2(0.93f, 0.235f), 26f * scale);
 
-        CreateText(root, "Become the Champion", Mathf.RoundToInt(SubheadingSize * fontScale), CreamColor, TextAnchor.MiddleCenter,
+        // Typography pass: the scaled size here (SubheadingSize * fontScale)
+        // never exactly equals the SubheadingSize constant, so the global
+        // size-based font inference silently missed this and fell back to
+        // the dialogue font - a "subheading" rendering in the wrong voice.
+        var taglineText = CreateText(root, "Become the Champion", Mathf.RoundToInt(SubheadingSize * fontScale), CreamColor, TextAnchor.MiddleCenter,
             new Vector2(0f, 0f), new Vector2(1f, 0.18f));
+        taglineText.font = HeadlineFont;
+        // Polish pass: MMA Champ is a bolder, wider display face than the
+        // dialogue font this used to silently fall back to - best-fit keeps
+        // it from wrapping/overflowing this band now that it's wider per
+        // character at the same nominal size.
+        taglineText.resizeTextForBestFit = true;
+        taglineText.resizeTextMinSize = 12;
+        taglineText.resizeTextMaxSize = Mathf.RoundToInt(SubheadingSize * fontScale);
 
         return root;
     }
@@ -621,6 +755,17 @@ public static class UIFactory
         var lineText = CreateText(card, "", SubheadingSize, CreamColor, TextAnchor.MiddleLeft,
             new Vector2(0.31f, 0.18f), new Vector2(0.97f, 0.69f), FontStyle.Italic);
         lineText.raycastTarget = false;
+        // Font System Overhaul, Part 2: this is the rival's actual spoken
+        // dialogue line - explicit override since SubheadingSize otherwise
+        // defaults to the dramatic headline font globally.
+        lineText.font = DialogueFont;
+        // Quick Fix (Font Replacement Pass), Part 7: rival lines can run a
+        // full sentence or two - PatrickHandSC-Regular's wider handwritten
+        // glyphs risk wrapping past this box's fixed height. Best-fit only
+        // shrinks if it actually needs to.
+        lineText.resizeTextForBestFit = true;
+        lineText.resizeTextMinSize = 14;
+        lineText.resizeTextMaxSize = SubheadingSize;
 
         var tapPrompt = CreateText(card, "TAP TO CONTINUE ▸", CaptionSize, MutedTextColor, TextAnchor.MiddleRight,
             new Vector2(0.31f, 0.04f), new Vector2(0.97f, 0.16f), FontStyle.Italic);
@@ -867,6 +1012,32 @@ public static class UIFactory
                 float dx = x + 0.5f - r;
                 float dy = y + 0.5f - r;
                 float alpha = Mathf.Sqrt(dx * dx + dy * dy) <= r ? 1f : 0f;
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+        tex.Apply();
+
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+    }
+
+    // Character Creation Redesign: a true soft-edged radial gradient (squared
+    // falloff - bright core, soft edge) instead of CircleSprite's hard binary
+    // edge, for spotlight/aura-style glows.
+    static Sprite GenerateGlowSprite()
+    {
+        const int size = 128;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+        float r = size / 2f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - r;
+                float dy = y + 0.5f - r;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy) / r;
+                float alpha = Mathf.Clamp01(1f - dist);
+                alpha *= alpha;
                 tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
             }
         }

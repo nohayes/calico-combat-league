@@ -37,6 +37,8 @@ public class BattleScreen : UIScreen
     readonly Text[] moveLabels;
     readonly Button itemButton;
     readonly Button recoverButton;
+    readonly Button parryButton;
+    readonly Button clinchButton;
     readonly Transform itemContainer;
     readonly RectTransform introCard;
     readonly CanvasGroup introGroup;
@@ -49,9 +51,14 @@ public class BattleScreen : UIScreen
     readonly Text introPlayerName;
     readonly Text introOpponentName;
     readonly RectTransform introTapeGroup;
-    readonly Text[] tapePlayerValues = new Text[7];
-    readonly Text[] tapeOpponentValues = new Text[7];
+    readonly Text[] tapePlayerValues = new Text[8];
+    readonly Text[] tapeOpponentValues = new Text[8];
     readonly Text introTapPrompt;
+    // Milestone 36, Part 1/9: the Tale of the Tape stat comparison now requires
+    // an explicit click rather than auto-advancing - this button only appears
+    // for that one beat.
+    readonly Button introContinueButton;
+    bool introContinueClicked;
     bool introSkipRequested;
     bool waitingForDialogueTap;
     bool dialogueAdvanceRequested;
@@ -59,6 +66,17 @@ public class BattleScreen : UIScreen
     readonly List<string> log = new List<string>();
     bool showingItems;
     bool animatingTurn;
+
+    // Milestone 43: which RivalDatabase.ShowdownTaunts indices have already
+    // fired this fight - cleared every Refresh() so each fresh fight (or
+    // rematch) gets all six available again, and each one shows at most once.
+    readonly HashSet<int> usedTauntIndices = new HashSet<int>();
+    const int TauntPlayerStruggling = 0;
+    const int TauntRivalDefense = 1;
+    const int TauntRivalStruggling = 2;
+    const int TauntPlayerCombo = 3;
+    const int TauntRivalCombo = 4;
+    const int TauntFinalPhase = 5;
 
     // Milestone 32: the opponent's "portrait archetype" used for both the
     // battle-stage portrait and the intro's Tale of the Tape archetype row -
@@ -71,10 +89,12 @@ public class BattleScreen : UIScreen
     int turnsThisFight;
     string lastComboNameThisFight;
 
-    // Milestone 32, Part 2: added ARCHETYPE and RECORD - the row-build loop in
-    // the constructor is already parameterized by this array's length, so the
-    // two new rows just slot in automatically with no layout math changes.
-    static readonly string[] TapeOfTheTapeLabels = { "LEVEL", "ARCHETYPE", "HEALTH", "STRENGTH", "DEFENSE", "SPEED", "RECORD" };
+    // Milestone 36, Part 4: LEVEL/ARCHETYPE/RECORD moved into the identity
+    // block above this table (alongside the new nickname/streak/flavor text),
+    // so this table is now exactly the brief's 8 combat stats. The row-build
+    // loop in the constructor is still parameterized by this array's length.
+    static readonly string[] TapeOfTheTapeLabels =
+        { "HP", "STAMINA", "STRENGTH", "DEFENSE", "SPEED", "STRIKING", "GRAPPLING", "SUBMISSION" };
 
     static readonly Color HealthColor = new Color(0.62f, 0.13f, 0.12f, 1f);
     static readonly Color StaminaColor = new Color(0.18f, 0.5f, 0.62f, 1f);
@@ -83,10 +103,28 @@ public class BattleScreen : UIScreen
     static readonly Color HealFlashColor = new Color(0.3f, 0.7f, 0.3f, 0.6f);
     static readonly Color MissColor = new Color(0.75f, 0.75f, 0.75f, 1f);
 
-    public BattleScreen(Transform parent, GameManager gm) : base(parent, gm, "BattleScreen", "battle")
+    // Milestone 37: the five battle arena backgrounds, keyed exactly to their
+    // filenames under Art/Backgrounds/ - ArtRegistry.GetBackground(key) already
+    // loads Art/Backgrounds/{key} generically, so no new ArtRegistry method is
+    // needed for any of these.
+    const string BackgroundStandard = "battle_background";
+    const string BackgroundGymChampion = "battle_background_gym";
+    const string BackgroundStreetFight = "battle_background_street";
+    const string BackgroundChampionship = "battle_background_champ";
+    const string BackgroundFinale = "battle_background_finale";
+
+    public BattleScreen(Transform parent, GameManager gm) : base(parent, gm, "BattleScreen", BackgroundStandard)
     {
         fightBilling = UIFactory.CreateText(Root.transform, "", UIFactory.CaptionSize, UIFactory.GoldColor,
             TextAnchor.MiddleCenter, new Vector2(0.04f, 0.966f), new Vector2(0.96f, 0.997f), FontStyle.Bold);
+        // Typography pass: this is a persistent match-title reminder during
+        // the whole fight - was capped at the smallest text tier in the app.
+        // Best-fit lets it render larger when the billing text is short
+        // (most of the time) while still safely shrinking for longer titles,
+        // without changing this strip's existing box.
+        fightBilling.resizeTextForBestFit = true;
+        fightBilling.resizeTextMinSize = 16;
+        fightBilling.resizeTextMaxSize = 28;
 
         // Landscape Conversion (Milestone 26): Player | VS | Opponent across the
         // full width, with each fighter's name/portrait/bars sitting directly
@@ -170,6 +208,14 @@ public class BattleScreen : UIScreen
         recoverButton = UIFactory.CreateButton(Root.transform, "RECOVER", new Vector2(0.54f, 0.115f), new Vector2(0.70f, 0.148f),
             () => OnRecoverSelected(), UIFactory.PositiveColor);
 
+        // Milestone 40, Part 1: PARRY/CLINCH - two universal defensive actions
+        // sitting in the side margins of the same button row (0.02-0.30 and
+        // 0.70-0.98 were both empty), so no existing button needs to move.
+        parryButton = UIFactory.CreateButton(Root.transform, "PARRY", new Vector2(0.02f, 0.115f), new Vector2(0.18f, 0.148f),
+            () => OnParrySelected(), UIFactory.SecondaryColor);
+        clinchButton = UIFactory.CreateButton(Root.transform, "CLINCH", new Vector2(0.82f, 0.115f), new Vector2(0.98f, 0.148f),
+            () => OnClinchSelected(), UIFactory.SecondaryColor);
+
         itemContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.02f, 0.02f), new Vector2(0.98f, 0.105f));
         itemContainer.gameObject.SetActive(false);
 
@@ -207,13 +253,18 @@ public class BattleScreen : UIScreen
             TextAnchor.MiddleCenter, new Vector2(0.04f, 0.79f), new Vector2(0.96f, 0.86f));
         introAnnouncementText.raycastTarget = false;
 
-        introMatchupGroup = UIFactory.CreateContainer(introCard, new Vector2(0f, 0.3f), new Vector2(1f, 0.78f));
+        // Milestone 36, Part 1: the face-off identity strip (portraits, name,
+        // nickname, archetype, level, record, win streak, flavor stats) now
+        // stays on screen alongside the stat table below it instead of being
+        // swapped out for it - together they form one continuous Tale of the
+        // Tape stage rather than two separate beats.
+        introMatchupGroup = UIFactory.CreateContainer(introCard, new Vector2(0f, 0.555f), new Vector2(1f, 0.79f));
 
         var playerPortraitGo = new GameObject("IntroPlayerPortrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         playerPortraitGo.transform.SetParent(introMatchupGroup, false);
         var playerPortraitRt = playerPortraitGo.GetComponent<RectTransform>();
-        playerPortraitRt.anchorMin = new Vector2(0.06f, 0.4f);
-        playerPortraitRt.anchorMax = new Vector2(0.3f, 0.78f);
+        playerPortraitRt.anchorMin = new Vector2(0.05f, 0.3f);
+        playerPortraitRt.anchorMax = new Vector2(0.3f, 1f);
         playerPortraitRt.offsetMin = Vector2.zero;
         playerPortraitRt.offsetMax = Vector2.zero;
         introPlayerPortrait = playerPortraitGo.GetComponent<Image>();
@@ -223,26 +274,41 @@ public class BattleScreen : UIScreen
         var opponentPortraitGo = new GameObject("IntroOpponentPortrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         opponentPortraitGo.transform.SetParent(introMatchupGroup, false);
         var opponentPortraitRt = opponentPortraitGo.GetComponent<RectTransform>();
-        opponentPortraitRt.anchorMin = new Vector2(0.7f, 0.4f);
-        opponentPortraitRt.anchorMax = new Vector2(0.94f, 0.78f);
+        opponentPortraitRt.anchorMin = new Vector2(0.7f, 0.3f);
+        opponentPortraitRt.anchorMax = new Vector2(0.95f, 1f);
         opponentPortraitRt.offsetMin = Vector2.zero;
         opponentPortraitRt.offsetMax = Vector2.zero;
         introOpponentPortrait = opponentPortraitGo.GetComponent<Image>();
         introOpponentPortrait.preserveAspect = true;
         introOpponentPortrait.raycastTarget = false;
 
+        // Milestone 36, Part 2/3/5: reused for a multi-line identity block
+        // (name+nickname / archetype+level / record+streak / flavor stats)
+        // instead of just a single name line - best-fit sized so four lines
+        // of broadcast flavor never clip inside the compact column below
+        // each portrait.
         introPlayerName = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.CreamColor,
-            TextAnchor.MiddleCenter, new Vector2(0.02f, 0.3f), new Vector2(0.34f, 0.4f), FontStyle.Bold);
+            TextAnchor.UpperCenter, new Vector2(0.0f, 0.0f), new Vector2(0.34f, 0.3f), FontStyle.Bold);
         introPlayerName.raycastTarget = false;
+        introPlayerName.resizeTextForBestFit = true;
+        introPlayerName.resizeTextMinSize = 10;
+        introPlayerName.resizeTextMaxSize = UIFactory.CaptionSize;
         introOpponentName = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.CreamColor,
-            TextAnchor.MiddleCenter, new Vector2(0.66f, 0.3f), new Vector2(0.98f, 0.4f), FontStyle.Bold);
+            TextAnchor.UpperCenter, new Vector2(0.66f, 0.0f), new Vector2(1f, 0.3f), FontStyle.Bold);
         introOpponentName.raycastTarget = false;
+        introOpponentName.resizeTextForBestFit = true;
+        introOpponentName.resizeTextMinSize = 10;
+        introOpponentName.resizeTextMaxSize = UIFactory.CaptionSize;
 
         var introVsText = UIFactory.CreateText(introMatchupGroup, "VS", UIFactory.SubheadingSize, UIFactory.GoldColor,
-            TextAnchor.MiddleCenter, new Vector2(0.42f, 0.5f), new Vector2(0.58f, 0.68f), FontStyle.Bold);
+            TextAnchor.MiddleCenter, new Vector2(0.4f, 0.42f), new Vector2(0.6f, 0.78f), FontStyle.Bold);
         introVsText.raycastTarget = false;
 
-        introTapeGroup = UIFactory.CreateContainer(introCard, new Vector2(0.08f, 0.08f), new Vector2(0.92f, 0.78f));
+        // Milestone 36, Part 4: now exactly the brief's 8 combat stats (HP,
+        // Stamina, Strength, Defense, Speed, Striking, Grappling, Submission),
+        // color-coded per row in SetTapeRow. Sits below the identity strip
+        // above rather than replacing it.
+        introTapeGroup = UIFactory.CreateContainer(introCard, new Vector2(0.08f, 0.135f), new Vector2(0.92f, 0.535f));
         for (int i = 0; i < TapeOfTheTapeLabels.Length; i++)
         {
             float slot = 1f / TapeOfTheTapeLabels.Length;
@@ -262,6 +328,12 @@ public class BattleScreen : UIScreen
             tapeOpponentValues[i].raycastTarget = false;
         }
         introTapeGroup.gameObject.SetActive(false);
+
+        // Milestone 36, Part 1/9: the only explicit "click to proceed" gate in
+        // the whole intro - shown solely during the Tale of the Tape beat.
+        introContinueButton = UIFactory.CreateButton(introCard, "CONTINUE", new Vector2(0.36f, 0.025f), new Vector2(0.64f, 0.11f),
+            () => introContinueClicked = true, UIFactory.PositiveColor);
+        introContinueButton.gameObject.SetActive(false);
 
         introText = UIFactory.CreateText(introCard, "", UIFactory.SubheadingSize, UIFactory.CreamColor,
             TextAnchor.MiddleCenter, new Vector2(0.04f, 0.08f), new Vector2(0.96f, 0.92f), FontStyle.Bold);
@@ -334,6 +406,7 @@ public class BattleScreen : UIScreen
         opponentFx.ClearPopups();
         turnsThisFight = 0;
         lastComboNameThisFight = null;
+        usedTauntIndices.Clear();
 
         // Names, portraits and the intro quote only change once per battle, so they're set here rather than every turn.
         string opponentNickname = GM.CurrentOpponentInfo != null && !string.IsNullOrEmpty(GM.CurrentOpponentInfo.Nickname)
@@ -346,7 +419,15 @@ public class BattleScreen : UIScreen
         fightBilling.text = GetFightBilling();
 
         Color playerTheme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
-        Color opponentTheme = GM.CurrentGym != null ? IconFactory.GetGymThemeColor(GM.CurrentGym.GymType) : UIFactory.AccentOrange;
+        // Milestone 44: Mirror Match is a literal reflection of the player -
+        // use the player's own archetype (sprite, theme color, silhouette
+        // fallback all key off this) instead of falling through to the
+        // synthetic gym's Championship-type default, which used to render it
+        // as a generic untinted silhouette.
+        bool mirrorFight = IsMirrorMatch();
+        Color opponentTheme = mirrorFight
+            ? playerTheme
+            : (GM.CurrentGym != null ? IconFactory.GetGymThemeColor(GM.CurrentGym.GymType) : UIFactory.AccentOrange);
         // Milestone 32 fix: Street Fight opponents carry their own randomly
         // rolled portrait archetype (set when the opponent was generated) -
         // previously this always fell through to the synthetic gym's
@@ -354,7 +435,9 @@ public class BattleScreen : UIScreen
         // silently showed as a Boxer regardless of what was actually rolled.
         introOpponentArchetype = IsStreetFight() && GM.CurrentStreetFightOpponent != null
             ? GM.CurrentStreetFightOpponent.PortraitArchetype
-            : (GM.CurrentGym != null ? IconFactory.GetPortraitArchetype(GM.CurrentGym.GymType) : ArchetypeType.Unspecified);
+            : mirrorFight
+                ? GM.Player.Archetype
+                : (GM.CurrentGym != null ? IconFactory.GetPortraitArchetype(GM.CurrentGym.GymType) : ArchetypeType.Unspecified);
         UIFactory.SetPlayerAvatar(playerPortrait, GM.Player.Archetype, playerTheme);
         UIFactory.SetFighterPortrait(opponentPortrait, GM.CurrentOpponentInfo?.OpponentId, introOpponentArchetype, opponentTheme);
 
@@ -368,24 +451,31 @@ public class BattleScreen : UIScreen
         introPlayerPortrait.color = playerPortrait.color;
         introOpponentPortrait.sprite = opponentPortrait.sprite;
         introOpponentPortrait.color = opponentPortrait.color;
-        introPlayerName.text = GM.Player.Name;
-        introOpponentName.text = GM.CurrentOpponent.Name;
+        RefreshIdentityText();
 
         bool championshipFight = IsChampionshipFight();
         bool leaderFight = IsLeaderFight();
         bool rivalFight = IsRivalFight();
+        ApplyArenaBackground();
         // Milestone 34, Part 3: the Rival Showdown gets its own violet tint -
         // Scratch's accent color - distinct from the Championship fight's gold/
         // amber and a plain trainer fight's neutral dark stage.
-        stageCard.GetComponent<Image>().color = rivalFight
-            ? new Color(0.14f, 0.09f, 0.18f, 0.94f)
-            : championshipFight
-                ? new Color(0.16f, 0.12f, 0.04f, 0.94f)
-                : new Color(0.08f, 0.07f, 0.07f, 0.88f);
+        // Milestone 44: Mirror Match gets its own cool, quiet blue-grey tint -
+        // deliberately calmer than Rival's loud violet or Championship's gold,
+        // matching its "quiet, strange, reflective" brief.
+        stageCard.GetComponent<Image>().color = mirrorFight
+            ? new Color(0.08f, 0.09f, 0.13f, 0.95f)
+            : rivalFight
+                ? new Color(0.14f, 0.09f, 0.18f, 0.94f)
+                : championshipFight
+                    ? new Color(0.16f, 0.12f, 0.04f, 0.94f)
+                    : new Color(0.08f, 0.07f, 0.07f, 0.88f);
         opponentAura.gameObject.SetActive(championshipFight || leaderFight || rivalFight);
-        opponentAura.color = rivalFight
-            ? new Color(RivalDatabase.AccentColor.r, RivalDatabase.AccentColor.g, RivalDatabase.AccentColor.b, 0.26f)
-            : new Color(UIFactory.GoldColor.r, UIFactory.GoldColor.g, UIFactory.GoldColor.b, 0.22f);
+        opponentAura.color = mirrorFight
+            ? new Color(0.6f, 0.68f, 0.78f, 0.22f)
+            : rivalFight
+                ? new Color(RivalDatabase.AccentColor.r, RivalDatabase.AccentColor.g, RivalDatabase.AccentColor.b, 0.26f)
+                : new Color(UIFactory.GoldColor.r, UIFactory.GoldColor.g, UIFactory.GoldColor.b, 0.22f);
         playerCombatantRoot.anchorMin = championshipFight ? new Vector2(0.01f, 0.01f) : new Vector2(0.04f, 0.03f);
         playerCombatantRoot.anchorMax = championshipFight ? new Vector2(0.49f, 1f) : new Vector2(0.48f, 0.98f);
         opponentCombatantRoot.anchorMin = championshipFight ? new Vector2(0.51f, 0.01f) : new Vector2(0.52f, 0.03f);
@@ -410,19 +500,30 @@ public class BattleScreen : UIScreen
             bool hasMove = i < moves.Count;
             moveButtons[i].gameObject.SetActive(hasMove);
             if (hasMove)
-                moveLabels[i].text = $"{moves[i].Name}\n({moves[i].StaminaCost} stam)";
+            {
+                var move = moves[i];
+                // Milestone 41, Part 1/2: the lightweight [Tag] now travels with
+                // the move into the move-selection buttons too, not just the
+                // Moves Screen - a colored rich-text tag, no new UI element.
+                string tagHex = ColorUtility.ToHtmlStringRGB(IconFactory.GetMoveCategoryColor(move.Category));
+                moveLabels[i].text = $"{move.Name}\n({move.StaminaCost} stam) <color=#{tagHex}>[{IconFactory.GetMoveCategoryLabel(move.Category)}]</color>";
+            }
         }
 
         UpdateMoveButtonStates();
         itemButton.interactable = false;
         recoverButton.interactable = false;
+        parryButton.interactable = false;
+        clinchButton.interactable = false;
 
         introCard.SetAsLastSibling();
-        introCard.GetComponent<Image>().color = rivalFight
-            ? new Color(0.16f, 0.1f, 0.2f, 0.98f)
-            : championshipFight
-                ? new Color(0.2f, 0.15f, 0.05f, 0.98f)
-                : new Color(0.08f, 0.07f, 0.07f, 0.98f);
+        introCard.GetComponent<Image>().color = mirrorFight
+            ? new Color(0.07f, 0.08f, 0.12f, 0.99f)
+            : rivalFight
+                ? new Color(0.16f, 0.1f, 0.2f, 0.98f)
+                : championshipFight
+                    ? new Color(0.2f, 0.15f, 0.05f, 0.98f)
+                    : new Color(0.08f, 0.07f, 0.07f, 0.98f);
         RunAnimation(FightIntroRoutine());
     }
 
@@ -438,12 +539,18 @@ public class BattleScreen : UIScreen
         introGroup.alpha = 0f;
         introGroup.blocksRaycasts = true;
 
-        bool championship = IsChampionshipFight();
+        // Milestone 44: Mirror Match shares GymType.Championship with the
+        // real Championship Gym (no Leader is set, which already keeps it
+        // out of the "CHAMPIONSHIP BOUT" leader-match branch elsewhere) but
+        // still needs to be excluded here so it gets its own billing/hype
+        // text instead of "CHAMPIONSHIP BOUT"/"Championship fight!".
+        bool introMirrorFight = IsMirrorMatch();
+        bool championship = IsChampionshipFight() && !introMirrorFight;
         bool leaderFight = IsLeaderFight() && !championship;
         bool rematch = leaderFight && GM.HasBecomeChampion();
 
         introBillingText.text = GetFightBilling();
-        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight(), IsRivalFight());
+        introAnnouncementText.text = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight(), IsRivalFight(), introMirrorFight);
         introText.text = "";
         introMatchupGroup.gameObject.SetActive(true);
         introTapeGroup.gameObject.SetActive(false);
@@ -452,17 +559,31 @@ public class BattleScreen : UIScreen
         yield return SlideIntroPortraitsIn();
         yield return WaitSkippable(championship ? 0.5f : leaderFight ? 0.35f : 0.22f);
 
+        // Milestone 36, Part 1/8/9: the Tale of the Tape - identity strip and
+        // stat table together, on screen at once, gated behind an explicit
+        // CONTINUE click rather than an auto-timed skip. introSkipRequested
+        // (tap-anywhere) is intentionally NOT honored here - Part 1 explicitly
+        // forbids auto-skipping this screen.
         PopulateTapeOfTheTape();
-        introMatchupGroup.gameObject.SetActive(false);
         introTapeGroup.gameObject.SetActive(true);
-        yield return WaitSkippable(championship ? 0.85f : leaderFight ? 0.65f : 0.5f);
+        introContinueClicked = false;
+        introContinueButton.gameObject.SetActive(true);
+        while (!introContinueClicked)
+            yield return null;
+        introContinueButton.gameObject.SetActive(false);
+        introMatchupGroup.gameObject.SetActive(false);
         introTapeGroup.gameObject.SetActive(false);
 
         // Personality beats (Milestone 22/23): a bio spotlight, then the opponent's
         // pre-fight trash talk - both reuse introText, both require an explicit tap
         // to advance (Part 5) instead of an auto-timed skip, with a portrait pop
         // (Part 7) and a larger font (Part 4) to make them feel noticeable.
+        // Font System Overhaul, Part 2: this is the one Text in the game reused
+        // for both dialogue AND dramatic hype beats - changing .fontSize alone
+        // never changes .font (that's only set once, at creation), so the swap
+        // has to be explicit here rather than inferred globally.
         introText.fontSize = UIFactory.SubheadingSize + 4;
+        introText.font = UIFactory.DialogueFont;
 
         // Milestone 32, Part 10: the Street Fight risk/reward reveal. Difficulty
         // stays hidden on StreetFightScreen itself (the player takes the risk by
@@ -497,19 +618,24 @@ public class BattleScreen : UIScreen
             yield return WaitForDialogueTap();
         }
         introText.fontSize = UIFactory.SubheadingSize;
+        introText.font = UIFactory.HeadlineFont;
 
         bool rivalFightHype = IsRivalFight();
-        introText.text = championship ? "CHAMPIONSHIP BOUT" : rivalFightHype ? "RIVAL SHOWDOWN" : leaderFight ? "LEADER CHALLENGE" : IsStreetFight() ? "STREET FIGHT" : "READY";
+        introText.text = introMirrorFight ? "MIRROR MATCH" : championship ? "CHAMPIONSHIP BOUT" : rivalFightHype ? "RIVAL SHOWDOWN" : leaderFight ? "LEADER CHALLENGE" : IsStreetFight() ? "STREET FIGHT" : "READY";
         // Milestone 34, Part 3: the rival fight's hype beat uses Scratch's own
         // accent color instead of the usual gold, so this moment reads as
-        // distinct even at a glance.
-        introText.color = rivalFightHype ? RivalDatabase.AccentColor : UIFactory.GoldColor;
-        PlayPulse(introText.rectTransform, championship ? 1.18f : rivalFightHype ? 1.16f : leaderFight ? 1.12f : 1.08f, 0.3f);
+        // distinct even at a glance. Milestone 44: Mirror Match uses a quiet
+        // silver instead of gold/violet - deliberately understated next to
+        // Rival's loud energy.
+        introText.color = introMirrorFight ? new Color(0.75f, 0.78f, 0.85f, 1f) : rivalFightHype ? RivalDatabase.AccentColor : UIFactory.GoldColor;
+        PlayPulse(introText.rectTransform, championship ? 1.18f : rivalFightHype ? 1.16f : leaderFight ? 1.12f : introMirrorFight ? 1.1f : 1.08f, 0.3f);
         yield return WaitSkippable(championship ? 0.55f : rivalFightHype ? 0.45f : leaderFight ? 0.4f : 0.28f);
 
         introText.text = "FIGHT!";
         introText.color = UIFactory.CreamColor;
         PlayPulse(introText.rectTransform, 1.2f, 0.24f);
+        // Milestone 44: no confetti for Mirror Match - its quiet/reflective
+        // tone calls for restraint instead of a festive celebration burst.
         if (championship) PlayCelebration(20);
         yield return WaitSkippable(0.26f);
 
@@ -530,6 +656,7 @@ public class BattleScreen : UIScreen
         itemButton.interactable = true;
         UpdateMoveButtonStates();
         UpdateRecoverButtonState();
+        UpdateDefenseButtonStates();
     }
 
     IEnumerator FadeGroup(float from, float to, float duration)
@@ -590,39 +717,152 @@ public class BattleScreen : UIScreen
         introTapPrompt.gameObject.SetActive(false);
     }
 
-    // Tale of the Tape (Part 2): existing stat data only, no new stats. Milestone
-    // 32 adds ARCHETYPE (derived the same way the portrait already is - no new
-    // data) and RECORD (the player's existing lifetime TotalWins/TotalLosses;
-    // opponents don't have an individual record tracked anywhere, so per the
-    // brief that field is skipped for them rather than inventing one).
+    // Milestone 36, Part 4: the brief's exact 8-stat comparison (HP, Stamina,
+    // Strength, Defense, Speed, Striking, Grappling, Submission), each row
+    // color-coded green/red/neutral for whichever side has the better value.
+    // LEVEL/ARCHETYPE/RECORD (Milestone 32) now live in the identity strip's
+    // text instead, populated by RefreshIdentityText - existing stat data
+    // only, still no new combat stats.
     void PopulateTapeOfTheTape()
     {
         var p = GM.Player.Stats;
         var o = GM.CurrentOpponent.Stats;
-        SetTapeRow(0, p.Level, o.Level);
-
-        string playerArchetype = ArchetypeDatabase.GetByType(GM.Player.Archetype)?.DisplayName ?? "Fighter";
-        string opponentArchetypeName = ArchetypeDatabase.GetByType(introOpponentArchetype)?.DisplayName ?? "Fighter";
-        SetTapeRow(1, playerArchetype, opponentArchetypeName);
-
-        SetTapeRow(2, p.MaxHealth, o.MaxHealth);
-        SetTapeRow(3, p.Strength, o.Strength);
-        SetTapeRow(4, p.Defense, o.Defense);
-        SetTapeRow(5, p.Speed, o.Speed);
-
-        SetTapeRow(6, $"{GM.TotalWins}-{GM.TotalLosses}", "-");
+        SetTapeRow(0, p.MaxHealth, o.MaxHealth);
+        SetTapeRow(1, p.MaxStamina, o.MaxStamina);
+        SetTapeRow(2, p.Strength, o.Strength);
+        SetTapeRow(3, p.Defense, o.Defense);
+        SetTapeRow(4, p.Speed, o.Speed);
+        SetTapeRow(5, p.Striking, o.Striking);
+        SetTapeRow(6, p.Grappling, o.Grappling);
+        SetTapeRow(7, p.Submission, o.Submission);
     }
 
     void SetTapeRow(int index, int playerValue, int opponentValue)
     {
         tapePlayerValues[index].text = playerValue.ToString();
         tapeOpponentValues[index].text = opponentValue.ToString();
+
+        // Typography pass: UIFactory.PositiveColor/DangerColor are tuned for
+        // button backgrounds, not small text on the same near-black fill -
+        // too dark to read at a glance, which defeats the point of a
+        // scannable better/worse comparison. Brighter, saturated variants
+        // used here only, for this comparison table specifically.
+        Color neutral = UIFactory.CreamColor;
+        Color better = new Color(0.4f, 0.85f, 0.4f, 1f);
+        Color worse = new Color(0.95f, 0.35f, 0.3f, 1f);
+
+        if (playerValue > opponentValue) { tapePlayerValues[index].color = better; tapeOpponentValues[index].color = worse; }
+        else if (playerValue < opponentValue) { tapePlayerValues[index].color = worse; tapeOpponentValues[index].color = better; }
+        else { tapePlayerValues[index].color = neutral; tapeOpponentValues[index].color = neutral; }
     }
 
-    void SetTapeRow(int index, string playerValue, string opponentValue)
+    // Milestone 36, Parts 2/3/5: the face-off identity block - name+nickname,
+    // archetype+level, record+win streak, and broadcast flavor stats (age/
+    // reach/style) for each side. Player record/streak come from
+    // GameManager's real lifetime counters; opponent record/streak are
+    // generated (presentation-only, never saved) from the fight's existing
+    // tier signals. Flavor stats are generated from archetype and are purely
+    // cosmetic - never read by combat, never editable.
+    void RefreshIdentityText()
     {
-        tapePlayerValues[index].text = playerValue;
-        tapeOpponentValues[index].text = opponentValue;
+        var gm = GM;
+        string playerNickname = FightPresentationGenerator.GetPlayerNickname(gm);
+        string playerArchetype = ArchetypeDatabase.GetByType(gm.Player.Archetype)?.DisplayName ?? "Fighter";
+        string playerRecord = FightPresentationGenerator.FormatRecord(gm.TotalWins, gm.TotalLosses);
+        string playerStreak = FightPresentationGenerator.FormatStreak(gm.CurrentWinStreak);
+        FightPresentationGenerator.GetFlavorStats(gm.Player.Archetype, "player_" + gm.Player.Archetype, gm.HasBecomeChampion(),
+            out int playerAge, out int playerReach, out string playerStyle);
+
+        introPlayerName.text =
+            $"{gm.Player.Name}\n\"{playerNickname}\"\n{playerArchetype}  -  Lv.{gm.Player.Stats.Level}\n" +
+            $"{playerRecord}{(string.IsNullOrEmpty(playerStreak) ? "" : "  (" + playerStreak + ")")}\n" +
+            FightPresentationGenerator.FormatFlavorLine(playerAge, playerReach, playerStyle);
+
+        var opponentInfo = gm.CurrentOpponentInfo;
+        string opponentNickname = opponentInfo != null && !string.IsNullOrEmpty(opponentInfo.Nickname) ? opponentInfo.Nickname : "";
+        string opponentArchetype = ArchetypeDatabase.GetByType(introOpponentArchetype)?.DisplayName ?? "Fighter";
+        GetOpponentRecordAndStreak(out int opponentWins, out int opponentLosses, out int opponentStreak);
+        string opponentRecord = FightPresentationGenerator.FormatRecord(opponentWins, opponentLosses);
+        string opponentStreakText = FightPresentationGenerator.FormatStreak(opponentStreak);
+        bool impressiveOpponent = IsChampionshipFight() || IsRivalFight();
+        FightPresentationGenerator.GetFlavorStats(introOpponentArchetype, opponentInfo?.OpponentId ?? "opponent", impressiveOpponent,
+            out int opponentAge, out int opponentReach, out string opponentStyle);
+
+        introOpponentName.text =
+            $"{gm.CurrentOpponent.Name}{(string.IsNullOrEmpty(opponentNickname) ? "" : "\n\"" + opponentNickname + "\"")}\n" +
+            $"{opponentArchetype}  -  Lv.{gm.CurrentOpponent.Stats.Level}\n" +
+            $"{opponentRecord}{(string.IsNullOrEmpty(opponentStreakText) ? "" : "  (" + opponentStreakText + ")")}\n" +
+            FightPresentationGenerator.FormatFlavorLine(opponentAge, opponentReach, opponentStyle);
+    }
+
+    // Milestone 36, Part 3/7: dispatches to the right generator based on the
+    // existing fight-type signals BattleScreen already computes elsewhere
+    // (championship/leader/street/rival/shadow/secret) - mirrors how
+    // GetFightBilling already branches on the same set of fight types.
+    void GetOpponentRecordAndStreak(out int wins, out int losses, out int streak)
+    {
+        string id = GM.CurrentOpponentInfo?.OpponentId ?? "";
+
+        if (IsRivalFight())
+        {
+            FightPresentationGenerator.GetRivalRecord(GM, out wins, out losses, out streak);
+        }
+        else if (id == GameManager.ShadowChampionId || id == StreetFightGenerator.SecretFighterOpponentId)
+        {
+            FightPresentationGenerator.GetSpecialOpponentRecord(id, out wins, out losses, out streak);
+        }
+        else if (IsStreetFight() && GM.CurrentStreetFightOpponent != null)
+        {
+            FightPresentationGenerator.GetStreetFighterRecord(GM.CurrentStreetFightOpponent.Difficulty, id, out wins, out losses, out streak);
+        }
+        else if (GM.CurrentGym != null)
+        {
+            FightPresentationGenerator.GetGymOpponentRecord(GM.CurrentGym.GymType, IsLeaderFight(), id, out wins, out losses, out streak);
+        }
+        else
+        {
+            wins = 5; losses = 3; streak = 0;
+        }
+    }
+
+    // Milestone 37, Part 1/2/8: reuses UIFactory.ApplyScreenBackground/
+    // ArtRegistry.GetBackground - the exact same Art/Backgrounds/{key}
+    // pipeline every other screen background already goes through - rather
+    // than adding a second background system. Targeting stageCard (the
+    // "FightStage" card) instead of Root means the arena image sits behind
+    // the aura/combatants/VS text/log but the HP bars, fighter cards, item
+    // panel and move buttons (all siblings of stageCard under Root, not
+    // children of it) are untouched and stay above it. ApplyScreenBackground
+    // already re-parents its "Background" child as first sibling on every
+    // call, so this is safe to call again on every Refresh() with a new key.
+    // Falls back to the standard arena if the specific key's sprite can't be
+    // found, and ApplyScreenBackground itself already no-ops safely (no
+    // exception) if even that one is missing - so this can never crash.
+    void ApplyArenaBackground()
+    {
+        string key = GetBattleBackgroundKey();
+        if (ArtRegistry.GetBackground(key) == null) key = BackgroundStandard;
+        UIFactory.ApplyScreenBackground(stageCard.gameObject, key);
+    }
+
+    // Milestone 37, Parts 2-6: most-specific fight type first - the Shadow
+    // Champion's synthetic gym is also GymType.Championship, so it has to be
+    // checked before the generic Championship Gym check, same ordering
+    // principle GetFightBilling already relies on.
+    string GetBattleBackgroundKey()
+    {
+        // Milestone 39, Part 2 / Milestone 44: the finale background is for
+        // the game's true climactic fights - Rival Showdown and, now that
+        // it's unlocked only after the Rival is defeated, Mirror Match too.
+        if (IsRivalFight() || IsMirrorMatch())
+            return BackgroundFinale;
+        if (IsChampionshipFight())
+            return BackgroundChampionship;
+        if (IsStreetFight())
+            return BackgroundStreetFight;
+        if (IsLeaderFight())
+            return BackgroundGymChampion;
+        return BackgroundStandard;
     }
 
     bool IsChampionshipFight()
@@ -647,6 +887,65 @@ public class BattleScreen : UIScreen
     // instead of inheriting the Championship fight's aura/tint.
     bool IsRivalFight() => GM.CurrentGym?.GymId == "rival_fight";
 
+    // Milestone 44: the Mirror Match shares its OpponentId with the existing
+    // Shadow Champion system it was repurposed from - GameManager.ShadowChampionId
+    // is unchanged for save compatibility even though the player-facing name,
+    // dialogue, and presentation are now "Mirror Match."
+    bool IsMirrorMatch() => GM.CurrentOpponentInfo?.OpponentId == GameManager.ShadowChampionId;
+
+    // Milestone 43: short mid-fight taunts, Rival Showdown only. Reads the
+    // SAME turn log BattleSystem already produces (combo/parry/clinch lines
+    // are already detected elsewhere in this file for popups) plus the
+    // current HP ratios already on GM.Player/GM.CurrentOpponent - no changes
+    // to BattleSystem, no new dialogue system. At most one taunt per turn
+    // (first matching, not-yet-used trigger in priority order below), and
+    // each of the six only ever fires once per fight.
+    void MaybeInjectRivalTaunt(List<string> turnLog)
+    {
+        if (!IsRivalFight() || GM.Player == null || GM.CurrentOpponent == null) return;
+
+        float playerRatio = (float)GM.Player.Stats.CurrentHealth / GM.Player.Stats.MaxHealth;
+        float rivalRatio = (float)GM.CurrentOpponent.Stats.CurrentHealth / GM.CurrentOpponent.Stats.MaxHealth;
+
+        int triggered = -1;
+        if (!usedTauntIndices.Contains(TauntFinalPhase) && (playerRatio < 0.2f || rivalRatio < 0.2f))
+            triggered = TauntFinalPhase;
+        else if (!usedTauntIndices.Contains(TauntRivalCombo) && LogHasComboBy(turnLog, GM.CurrentOpponent.Name))
+            triggered = TauntRivalCombo;
+        else if (!usedTauntIndices.Contains(TauntPlayerCombo) && LogHasComboBy(turnLog, GM.Player.Name))
+            triggered = TauntPlayerCombo;
+        else if (!usedTauntIndices.Contains(TauntRivalStruggling) && rivalRatio < 0.5f)
+            triggered = TauntRivalStruggling;
+        else if (!usedTauntIndices.Contains(TauntPlayerStruggling) && playerRatio < 0.5f)
+            triggered = TauntPlayerStruggling;
+        else if (!usedTauntIndices.Contains(TauntRivalDefense) && LogHasFighterDefense(turnLog, GM.CurrentOpponent.Name))
+            triggered = TauntRivalDefense;
+
+        if (triggered < 0) return;
+        usedTauntIndices.Add(triggered);
+
+        // Same rich-text convention the opponent's pre-fight quote already
+        // uses (Refresh(), below) - just the rival's own accent color instead
+        // of the generic muted one, and no name-prefix so this never gets
+        // mistaken for an attack-resolution line by TryGetAttack/ProcessSingleLine.
+        string hex = ColorUtility.ToHtmlStringRGB(RivalDatabase.AccentColor);
+        turnLog.Add($"<i><color=#{hex}>\"{RivalDatabase.ShowdownTaunts[triggered]}\" - {RivalDatabase.RivalName}</color></i>");
+    }
+
+    static bool LogHasComboBy(List<string> log, string fighterName)
+    {
+        for (int i = 0; i < log.Count; i++)
+            if (log[i].StartsWith(fighterName) && log[i].Contains("lands a COMBO!")) return true;
+        return false;
+    }
+
+    static bool LogHasFighterDefense(List<string> log, string fighterName)
+    {
+        for (int i = 0; i < log.Count; i++)
+            if (log[i].StartsWith(fighterName) && (log[i].Contains("PARRY!") || log[i].Contains("CLINCH SUCCESS!"))) return true;
+        return false;
+    }
+
     string GetFightBilling()
     {
         var gym = GM.CurrentGym;
@@ -657,6 +956,8 @@ public class BattleScreen : UIScreen
             return "CHAMPIONSHIP BOUT";
         if (IsRivalFight())
             return "RIVAL SHOWDOWN";
+        if (IsMirrorMatch())
+            return "MIRROR MATCH";
         if (IsStreetFight())
             return "STREET FIGHT";
         if (isLeader)
@@ -664,8 +965,9 @@ public class BattleScreen : UIScreen
         return gym != null ? $"{gym.GymName.ToUpper()} SHOWDOWN" : "TONIGHT'S FEATURED MATCHUP";
     }
 
-    static string GetFightAnnouncement(bool championship, bool leaderFight, bool rematch, bool streetFight, bool rivalFight)
+    static string GetFightAnnouncement(bool championship, bool leaderFight, bool rematch, bool streetFight, bool rivalFight, bool mirrorFight = false)
     {
+        if (mirrorFight) return "No more opponents left. Just yourself.";
         if (championship) return "Championship fight!";
         if (rivalFight) return "The fight you've been waiting for.";
         if (streetFight) return "Random opponent. Anything can happen.";
@@ -801,6 +1103,8 @@ public class BattleScreen : UIScreen
         animatingTurn = true;
         itemButton.interactable = false;
         recoverButton.interactable = false;
+        parryButton.interactable = false;
+        clinchButton.interactable = false;
         UpdateMoveButtonStates();
 
         int playerHpBefore = GM.Player.Stats.CurrentHealth;
@@ -815,6 +1119,7 @@ public class BattleScreen : UIScreen
         int taken = Mathf.Max(0, playerHpBefore - GM.Player.Stats.CurrentHealth);
         GM.RecordCombatStats(dealt, taken);
 
+        MaybeInjectRivalTaunt(turnLog);
         AppendLog(turnLog);
         UpdateBars();
         UpdateComboChainDisplay();
@@ -830,6 +1135,8 @@ public class BattleScreen : UIScreen
         animatingTurn = true;
         itemButton.interactable = false;
         recoverButton.interactable = false;
+        parryButton.interactable = false;
+        clinchButton.interactable = false;
         UpdateMoveButtonStates();
 
         int playerHpBefore = GM.Player.Stats.CurrentHealth;
@@ -844,10 +1151,82 @@ public class BattleScreen : UIScreen
         int taken = Mathf.Max(0, playerHpBefore - GM.Player.Stats.CurrentHealth);
         GM.RecordCombatStats(dealt, taken);
 
+        MaybeInjectRivalTaunt(turnLog);
         AppendLog(turnLog);
         UpdateBars();
         UpdateComboChainDisplay();
         RunAnimation(PlayTurnFeedback(turnLog, result, null));
+    }
+
+    // Milestone 40, Part 1: PARRY and CLINCH - mirror OnRecoverSelected's
+    // shape exactly (no move, no stamina-cost gate since both are always
+    // available per the brief), just calling the matching BattleSystem method.
+    void OnParrySelected()
+    {
+        if (animatingTurn) return;
+        if (GM.CurrentBattle == null || GM.Player == null) return;
+
+        animatingTurn = true;
+        itemButton.interactable = false;
+        recoverButton.interactable = false;
+        parryButton.interactable = false;
+        clinchButton.interactable = false;
+        UpdateMoveButtonStates();
+
+        int playerHpBefore = GM.Player.Stats.CurrentHealth;
+        int opponentHpBefore = GM.CurrentOpponent.Stats.CurrentHealth;
+
+        var turnLog = new List<string>();
+        var result = GM.CurrentBattle.PlayerParry(turnLog);
+        turnsThisFight++;
+        CaptureComboFromLog(turnLog);
+
+        int dealt = Mathf.Max(0, opponentHpBefore - GM.CurrentOpponent.Stats.CurrentHealth);
+        int taken = Mathf.Max(0, playerHpBefore - GM.Player.Stats.CurrentHealth);
+        GM.RecordCombatStats(dealt, taken);
+
+        MaybeInjectRivalTaunt(turnLog);
+        AppendLog(turnLog);
+        UpdateBars();
+        UpdateComboChainDisplay();
+        RunAnimation(PlayTurnFeedback(turnLog, result, null));
+    }
+
+    void OnClinchSelected()
+    {
+        if (animatingTurn) return;
+        if (GM.CurrentBattle == null || GM.Player == null) return;
+
+        animatingTurn = true;
+        itemButton.interactable = false;
+        recoverButton.interactable = false;
+        parryButton.interactable = false;
+        clinchButton.interactable = false;
+        UpdateMoveButtonStates();
+
+        int playerHpBefore = GM.Player.Stats.CurrentHealth;
+        int opponentHpBefore = GM.CurrentOpponent.Stats.CurrentHealth;
+
+        var turnLog = new List<string>();
+        var result = GM.CurrentBattle.PlayerClinch(turnLog);
+        turnsThisFight++;
+        CaptureComboFromLog(turnLog);
+
+        int dealt = Mathf.Max(0, opponentHpBefore - GM.CurrentOpponent.Stats.CurrentHealth);
+        int taken = Mathf.Max(0, playerHpBefore - GM.Player.Stats.CurrentHealth);
+        GM.RecordCombatStats(dealt, taken);
+
+        MaybeInjectRivalTaunt(turnLog);
+        AppendLog(turnLog);
+        UpdateBars();
+        UpdateComboChainDisplay();
+        RunAnimation(PlayTurnFeedback(turnLog, result, null));
+    }
+
+    void UpdateDefenseButtonStates()
+    {
+        parryButton.interactable = !animatingTurn;
+        clinchButton.interactable = !animatingTurn;
     }
 
     void UpdateRecoverButtonState()
@@ -973,13 +1352,19 @@ public class BattleScreen : UIScreen
         itemButton.interactable = true;
         UpdateMoveButtonStates();
         UpdateRecoverButtonState();
+        UpdateDefenseButtonStates();
     }
 
     bool TryGetAttack(string line, MoveData selectedMove, out bool attackerIsPlayer, out MoveData move, out bool critical)
     {
         attackerIsPlayer = line.StartsWith(GM.Player.Name);
         bool attackerIsOpponent = !attackerIsPlayer && GM.CurrentOpponent != null && line.StartsWith(GM.CurrentOpponent.Name);
-        bool isResolution = line.Contains("but misses!") || line.Contains(" hits ") || line.Contains("CRITICAL");
+        // Milestone 40, Part 3: a fully-parried hit still names the attacker
+        // and still throws the move - just without the hit-flash/damage a
+        // connecting strike gets (the PARRY! line right before it already
+        // covers the defender's own feedback).
+        bool isResolution = line.Contains("but misses!") || line.Contains(" hits ") || line.Contains("CRITICAL") ||
+            line.Contains("completely blocked!");
         critical = line.Contains("CRITICAL");
         move = null;
 
@@ -1005,9 +1390,11 @@ public class BattleScreen : UIScreen
 
     static bool IsStatusFeedbackLine(string line)
     {
-        return line.Contains("is bleeding!") || line.Contains("is stunned!") ||
+        return line.Contains("is bleeding!") || line.Contains("is stunned") ||
             line.Contains("defense drops!") || line.Contains("speed drops!") ||
-            line.Contains("lands a COMBO!") || line.Contains("catches their breath");
+            line.Contains("lands a COMBO!") || line.Contains("catches their breath") ||
+            line.Contains("PARRY!") || line.Contains("PARTIAL BLOCK!") ||
+            line.Contains("CLINCH SUCCESS!") || line.Contains("COMBO INTERRUPTED!");
     }
 
     // Milestone 35, Part 3: move is optional - only the attack-resolution path
@@ -1028,9 +1415,17 @@ public class BattleScreen : UIScreen
         // branch), so the sound can't double-fire for the same combo.
         if (line.Contains("lands a COMBO!"))
         {
+            // Milestone 41, Part 4: shows the actual combo name ("ONE-TWO
+            // FINISH") instead of a generic "COMBO!" - the recipe itself
+            // stays hidden (nothing here reveals the move sequence), but a
+            // named, memorable payoff is the whole point of "I want to do
+            // that again." Reuses the existing emphasized popup + a brief
+            // time-impact beat, the same weight a critical hit already gets.
             AudioManager.Instance?.PlayComboTrigger();
             var fx = namedIsPlayer ? playerFx : opponentFx;
-            fx.SpawnPopup("COMBO!", CritColor, true);
+            string comboName = ExtractComboName(line);
+            fx.SpawnPopup(string.IsNullOrEmpty(comboName) ? "COMBO!" : comboName.ToUpperInvariant(), CritColor, true);
+            PlayTimeImpact(0.22f, 0.1f);
         }
         else if (line.Contains("CRITICAL") && line.Contains("damage!"))
         {
@@ -1054,12 +1449,39 @@ public class BattleScreen : UIScreen
             ShowHitFeedback(onOpponentSide: namedIsOpponent, ExtractNumber(line), crit: false, isStatusDamage: true);
         }
         else if (line.Contains("is bleeding!")) ShowStatusFeedback(namedIsOpponent, StatusEffectType.Bleed);
-        else if (line.Contains("is stunned!")) ShowStatusFeedback(namedIsOpponent, StatusEffectType.Stun);
+        // Bug fix (World Polish Pass): the turn-skip message ("is stunned and
+        // cannot act!") didn't match the old "is stunned!" check, so a stun
+        // that actually skipped a turn showed no popup/audio at all - only
+        // the stun's initial application did. Matching on the unadorned
+        // substring catches both messages.
+        else if (line.Contains("is stunned")) ShowStatusFeedback(namedIsOpponent, StatusEffectType.Stun);
         else if (line.Contains("defense drops!")) ShowStatusFeedback(namedIsOpponent, StatusEffectType.DefenseDown);
         else if (line.Contains("speed drops!")) ShowStatusFeedback(namedIsOpponent, StatusEffectType.SpeedDown);
         else if (line.Contains("heals") && line.Contains("health.")) ShowHealFeedback(ExtractNumber(line));
         else if (line.Contains("catches their breath") && line.Contains("recovers"))
             ShowStaminaFeedback(isPlayer: namedIsPlayer, ExtractNumber(line));
+        // Milestone 40, Part 3: these four lines all name whichever fighter the
+        // line is ABOUT (the defender for PARRY/PARTIAL BLOCK/CLINCH SUCCESS,
+        // the attacker whose chain just broke for COMBO INTERRUPTED) - so the
+        // feedback always lands on that fighter's own side.
+        // Milestone 41, Part 7: labels tightened so each one answers "what
+        // happened" on sight - PARRY now states the result (0 damage) instead
+        // of just naming the action, PARTIAL BLOCK matches its own log
+        // keyword exactly instead of the more ambiguous "BLOCKED", and COMBO
+        // BROKEN reads as a direct consequence rather than a vague label.
+        else if (line.Contains("PARRY!")) ShowDefenseFeedback(onOpponentSide: !namedIsPlayer, "PARRY! 0 DMG", UIFactory.PositiveColor);
+        else if (line.Contains("PARTIAL BLOCK!")) ShowDefenseFeedback(onOpponentSide: !namedIsPlayer, "PARTIAL BLOCK", UIFactory.GoldColor);
+        else if (line.Contains("CLINCH SUCCESS!")) ShowDefenseFeedback(onOpponentSide: !namedIsPlayer, "CLINCH!", UIFactory.SecondaryColor);
+        else if (line.Contains("COMBO INTERRUPTED!")) ShowDefenseFeedback(onOpponentSide: !namedIsPlayer, "COMBO BROKEN!", CritColor);
+    }
+
+    // Milestone 40, Part 3: a small, generic popup for the new defensive
+    // feedback lines - reuses FighterCardFX.SpawnPopup the same way every
+    // other feedback method already does, no new FX primitives.
+    void ShowDefenseFeedback(bool onOpponentSide, string label, Color color)
+    {
+        var fx = onOpponentSide ? opponentFx : playerFx;
+        fx.SpawnPopup(label, color, false);
     }
 
     void ShowStaminaFeedback(bool isPlayer, int amount)
@@ -1179,6 +1601,18 @@ public class BattleScreen : UIScreen
         int end = start;
         while (end < line.Length && char.IsDigit(line[end])) end++;
         return int.Parse(line.Substring(start, end - start));
+    }
+
+    // Milestone 41, Part 4: pulls the combo's own display name out of
+    // BattleSystem's "{Attacker} lands a COMBO! {DisplayName}!" line - the
+    // name was already in the log text, just never shown in the popup itself.
+    static string ExtractComboName(string line)
+    {
+        const string marker = "lands a COMBO! ";
+        int idx = line.IndexOf(marker);
+        if (idx < 0) return null;
+        string rest = line.Substring(idx + marker.Length);
+        return rest.EndsWith("!") ? rest.Substring(0, rest.Length - 1) : rest;
     }
 
     // Appends only the new lines instead of rejoining the whole history every turn,

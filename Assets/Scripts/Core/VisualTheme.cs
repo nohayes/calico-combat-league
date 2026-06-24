@@ -27,11 +27,18 @@ public static class VisualTheme
 
     // ---------- Typography scale (point sizes against the 1080x1920 reference canvas) ----------
 
-    public const int HeadingSize = 42;
-    public const int SubheadingSize = 26;
-    public const int BodySize = 22;
-    public const int CaptionSize = 18;
-    public const int ButtonTextSize = 28;
+    // Font Size Fix: the typography pass added best-fit min/max bounds but
+    // left these source-of-truth constants untouched - best-fit only shrinks
+    // *down* from whatever max it's given, so capping at the old sizes meant
+    // most text (anything that already fit) rendered completely unchanged.
+    // Raised the constants themselves instead; every CreateText/CreateHeading/
+    // CreateButton call site, and every best-fit max that already referenced
+    // these constants, scales up automatically with no further edits.
+    public const int HeadingSize = 56;     // was 42 (+33%, major titles)
+    public const int SubheadingSize = 32;  // was 26 (+23%, screen headers/dialogue)
+    public const int BodySize = 26;        // was 22 (+18%, battle log/body)
+    public const int CaptionSize = 20;     // was 18 (+11%, small captions)
+    public const int ButtonTextSize = 34;  // was 28 (+21%, buttons)
 
     // ---------- Shared style rules ----------
 

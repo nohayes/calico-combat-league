@@ -36,6 +36,10 @@ public class GameManager : MonoBehaviour
     public int TotalWins { get; private set; }
     public int TotalLosses { get; private set; }
     public int TotalBattles => TotalWins + TotalLosses;
+
+    // Milestone 36: consecutive-win streak for the Tale of the Tape's "Win
+    // Streak" readout - incremented on a win, reset on a loss, in EndBattle.
+    public int CurrentWinStreak { get; private set; }
     public int TotalDamageDealt { get; private set; }
     public int TotalDamageTaken { get; private set; }
     public int TotalCoinsEarned { get; private set; }
@@ -96,22 +100,22 @@ public class GameManager : MonoBehaviour
         ChangeState(GameState.GymMap);
     }
 
+    // Bug fix (World Polish Pass): this used to delete the save and wipe all
+    // progress immediately on clicking "NEW GAME" - before the player had
+    // even named their fighter or picked an archetype. Backing out of Fighter
+    // Creation (or force-quitting) left the old save unrecoverably gone with
+    // no new one created. Now this is just a navigation transition; the
+    // actual destructive reset happens in StartNewGame, only once the player
+    // confirms with BEGIN CAREER.
     public void StartFreshGame()
     {
-        SaveSystem.DeleteSave();
-        Player = null;
-        defeatedOpponentIds.Clear();
-        completedGymIds.Clear();
-        inventory.Clear();
-        combatBuffActive = false;
-        activeCombatBuffAmount = 0;
-        hasSeenRivalIntro = false;
         ChangeState(GameState.FighterCreation);
     }
 
     public void StartNewGame(string fighterName, ArchetypeType archetype)
     {
         string name = string.IsNullOrWhiteSpace(fighterName) ? "Fighter" : fighterName.Trim();
+        SaveSystem.DeleteSave();
         defeatedOpponentIds.Clear();
         completedGymIds.Clear();
         inventory.Clear();
@@ -133,27 +137,24 @@ public class GameManager : MonoBehaviour
         SaveGame();
     }
 
+    // Milestone 39: the Rival Showdown moved from gating the Championship Gym
+    // to being the true final test AFTER it (see IsRivalFightReady below) - the
+    // Championship Gym now unlocks on its normal prerequisite alone again,
+    // same as every other gym.
     public bool IsGymUnlocked(GymInfo gym)
     {
         if (gym == null) return false;
         bool prerequisiteMet = string.IsNullOrEmpty(gym.RequiredGymId) || completedGymIds.Contains(gym.RequiredGymId);
-
-        // Milestone 34, Part 1: the Championship Gym additionally requires
-        // defeating Rival Scratch first - the prerequisite gym (BJJ) alone is
-        // no longer enough. GymSelectionScreen shows the Rival Showdown row
-        // in the gap between "BJJ cleared" and "rival defeated."
-        if (gym.GymType == GymType.Championship) return prerequisiteMet && HasDefeatedRival;
         return prerequisiteMet;
     }
 
-    // Milestone 34, Part 1: true exactly in the gap between "prerequisite gym
-    // cleared" and "rival defeated" - the window where GymSelectionScreen
-    // should show the Rival Showdown encounter instead of a locked Championship row.
-    public bool IsRivalFightReady(GymInfo championshipGym)
+    // Milestone 39 (was Milestone 34's pre-Championship gate): true once the
+    // player has actually become champion and hasn't yet beaten Scratch - the
+    // window where GymSelectionScreen shows the Rival Showdown banner. This is
+    // now the league's real final test, not a gatekeeper before one.
+    public bool IsRivalFightReady()
     {
-        if (championshipGym == null || championshipGym.GymType != GymType.Championship) return false;
-        bool prerequisiteMet = string.IsNullOrEmpty(championshipGym.RequiredGymId) || completedGymIds.Contains(championshipGym.RequiredGymId);
-        return prerequisiteMet && !HasDefeatedRival;
+        return HasBecomeChampion() && !HasDefeatedRival;
     }
 
     public bool IsGymCompleted(GymInfo gym)
@@ -294,7 +295,18 @@ public class GameManager : MonoBehaviour
             Player.Stats.Coins += LastRewardCoins;
             TotalCoinsEarned += LastRewardCoins;
             TotalWins++;
+            CurrentWinStreak++;
             if (submissionFinish) SubmissionWins++;
+            // Bug fix (World Polish Pass): must be captured before adding to
+            // defeatedOpponentIds below, or HasDefeatedShadowChampion would
+            // always read true by the time RecordShadowChampionVictory's guard
+            // checks it - silently allowing a duplicate Hall of Champions entry
+            // on every repeat win, not just the first.
+            bool alreadyDefeatedShadowChampion = HasDefeatedShadowChampion;
+            // Milestone 39, Part 9: same before-the-Add capture, so a rival
+            // rematch (the fight stays available to replay afterward) doesn't
+            // add a duplicate Hall of Champions entry.
+            bool alreadyDefeatedRival = HasDefeatedRival;
             defeatedOpponentIds.Add(CurrentOpponentInfo.OpponentId);
 
             bool becameChampionJustNow = false;
@@ -311,7 +323,8 @@ public class GameManager : MonoBehaviour
             }
 
             if (becameChampionJustNow) RecordChampionLegacy();
-            if (CurrentOpponentInfo.OpponentId == ShadowChampionId) RecordShadowChampionVictory();
+            if (CurrentOpponentInfo.OpponentId == ShadowChampionId && !alreadyDefeatedShadowChampion) RecordShadowChampionVictory();
+            if (CurrentOpponentInfo.OpponentId == RivalFightOpponentId && !alreadyDefeatedRival) RecordRivalVictoryLegacy();
 
             CheckAchievements();
             SaveGame();
@@ -328,6 +341,7 @@ public class GameManager : MonoBehaviour
             LastRewardCoins = 0;
             LastVictoryLeveledUpTo = 0;
             TotalLosses++;
+            CurrentWinStreak = 0;
             CheckAchievements();
             SaveGame();
             ChangeState(GameState.Defeat);
@@ -352,19 +366,35 @@ public class GameManager : MonoBehaviour
     // does everything a fight needs once given an OpponentInfo, and
     // GymType.Championship already gets the strongest Fight Night presentation
     // tier (see BattleScreen) with zero extra code.
+    //
+    // Milestone 44 (Mirror Match): repurposed in place rather than duplicated -
+    // the OpponentId/GymId constants below are UNCHANGED from the original
+    // Shadow Champion feature specifically so saves where a player already
+    // has "shadow_champion" in defeatedOpponentIds keep reading as defeated.
+    // Only the unlock gate, stat modifiers, dialogue, and presentation names
+    // changed; the underlying ids did not.
 
     public const string ShadowChampionId = "shadow_champion";
 
     public bool HasDefeatedShadowChampion => defeatedOpponentIds.Contains(ShadowChampionId);
 
+    // Milestone 44, Unlock Flow: now requires defeating Rival Scratch too,
+    // not just becoming champion - "the true final test" comes after both.
     public void StartShadowChampionBattle()
     {
-        if (Player == null || !HasBecomeChampion()) return;
+        if (Player == null || !HasBecomeChampion() || !HasDefeatedRival) return;
 
         var mirroredStats = Player.Stats.Clone();
+        // Milestone 44, Mirror Opponent: "+10% HP, +10% Stamina, +5% combat
+        // stats" per the brief - was +10% HP/Stamina/Speed-only before.
         mirroredStats.MaxHealth = Mathf.RoundToInt(mirroredStats.MaxHealth * 1.1f);
         mirroredStats.MaxStamina = Mathf.RoundToInt(mirroredStats.MaxStamina * 1.1f);
-        mirroredStats.Speed = Mathf.RoundToInt(mirroredStats.Speed * 1.1f);
+        mirroredStats.Strength = Mathf.RoundToInt(mirroredStats.Strength * 1.05f);
+        mirroredStats.Defense = Mathf.RoundToInt(mirroredStats.Defense * 1.05f);
+        mirroredStats.Speed = Mathf.RoundToInt(mirroredStats.Speed * 1.05f);
+        mirroredStats.Striking = Mathf.RoundToInt(mirroredStats.Striking * 1.05f);
+        mirroredStats.Grappling = Mathf.RoundToInt(mirroredStats.Grappling * 1.05f);
+        mirroredStats.Submission = Mathf.RoundToInt(mirroredStats.Submission * 1.05f);
         mirroredStats.ResetForBattle();
 
         var shadowOpponent = new OpponentInfo
@@ -372,14 +402,22 @@ public class GameManager : MonoBehaviour
             OpponentId = ShadowChampionId,
             Name = $"Shadow {Player.Name}",
             Stats = mirroredStats,
+            // Milestone 44: same equipped moves as the player (unchanged) -
+            // and now opts into the existing smart-fighter AI (combo-seeking,
+            // stamina-efficient) the same way Rival Scratch already does, per
+            // "use smart fighter behavior if available."
             Moves = new List<MoveData>(Player.EquippedMoves),
             RewardXP = 300,
             RewardCoins = 150,
             Nickname = "Your Reflection",
-            Quote = "Every move you know, I know. Every habit you have, I have. The only question left is which one of us blinks first.",
-            Bio = $"A perfect reflection of {Player.Name} - same hands, same instincts, same scars. It has studied every fight you've ever won. Now it wants to win one of its own.",
-            LossLine = "...Huh. Didn't expect to lose to myself. Good. Be better than this version of you.",
-            WinLine = "Of course I won. I'm you, on your best day. Come back when you're better than your best day."
+            // Milestone 44, Dialogue: pre-fight Bio/Quote shown as the existing
+            // two tap-through beats every Fight Night intro already has;
+            // Victory/Defeat use the existing LossLine/WinLine quote display.
+            Quote = "Every mistake. Every habit. Every shortcut. I know them all.",
+            Bio = "You beat everyone else.\nNow beat the fighter who got you here.",
+            LossLine = "You are not the same fighter who started.\nThat is why you won.",
+            WinLine = "You already know how to beat me.\nTry again.",
+            IsSmartFighter = true
         };
 
         // GymType.Championship alone gives the fight the strongest existing
@@ -388,7 +426,7 @@ public class GameManager : MonoBehaviour
         CurrentGym = new GymInfo
         {
             GymId = "shadow_gym",
-            GymName = "The Shadow Gym",
+            GymName = "The Mirror Match",
             GymType = GymType.Championship
         };
 
@@ -404,7 +442,27 @@ public class GameManager : MonoBehaviour
             FinalLevel = Player.Stats.Level,
             TotalWinsAtCompletion = TotalWins,
             CompletionDate = DateTime.Now.ToString("yyyy-MM-dd"),
-            Title = "Shadow Slayer"
+            // Milestone 44: "Shadow Slayer" -> "True Champion" per the
+            // brief's reward language. Existing saves that already earned
+            // "Shadow Slayer" keep that historical record unchanged - only
+            // new victories from here on get the new title.
+            Title = "True Champion"
+        });
+    }
+
+    // Milestone 39, Part 9: the Rival Showdown's own permanent legacy entry -
+    // same existing ChampionRecord/Title infrastructure as Shadow Slayer
+    // above, no new fields or systems.
+    void RecordRivalVictoryLegacy()
+    {
+        hallOfChampions.Add(new ChampionRecord
+        {
+            FighterName = Player.Name,
+            Archetype = Player.Archetype.ToString(),
+            FinalLevel = Player.Stats.Level,
+            TotalWinsAtCompletion = TotalWins,
+            CompletionDate = DateTime.Now.ToString("yyyy-MM-dd"),
+            Title = "Rival Conqueror"
         });
     }
 
@@ -432,30 +490,37 @@ public class GameManager : MonoBehaviour
     {
         if (Player == null) return;
 
+        // Milestone 39: the rival is now the league's true final test, fought
+        // after the Championship - stats/moves bumped to exceed even Champion
+        // Volkov's (260/95/23/22/21/25/25/25) across the board, so this reads
+        // as the strongest opponent in the game rather than a mid-game gate.
+        // Moves mix in his strongest non-boxing options (still Boxer-themed:
+        // Jab/Cross/Hook preserve the One-Two Finish combo) for a complete,
+        // well-rounded final-boss kit instead of the old boxing-only set.
         var rivalOpponent = new OpponentInfo
         {
             OpponentId = RivalFightOpponentId,
             Name = RivalDatabase.RivalName,
             Stats = new FighterStats
             {
-                MaxHealth = 230,
-                CurrentHealth = 230,
-                MaxStamina = 85,
-                CurrentStamina = 85,
-                Strength = 18,
-                Defense = 17,
-                Speed = 20,
-                Striking = 23,
-                Grappling = 12,
-                Submission = 9
+                MaxHealth = 270,
+                CurrentHealth = 270,
+                MaxStamina = 100,
+                CurrentStamina = 100,
+                Strength = 24,
+                Defense = 23,
+                Speed = 24,
+                Striking = 27,
+                Grappling = 20,
+                Submission = 18
             },
-            Moves = MoveDatabase.BoxingTrainerMoves,
-            RewardXP = 200,
-            RewardCoins = 100,
-            Nickname = "The Rival",
+            Moves = new List<MoveData> { MoveDatabase.Jab, MoveDatabase.Cross, MoveDatabase.Hook, MoveDatabase.SpinningBackKick, MoveDatabase.RearNakedChoke },
+            RewardXP = 320,
+            RewardCoins = 160,
+            Nickname = RivalDatabase.GetShowdownNickname(),
             Quote = "Talent doesn't ask permission. Lucky for you, I brought enough for both of us.",
             Description = "The fighter the whole league has been comparing you to since day one.",
-            Bio = "Same league, same gyms, same dream - except he's been one step ahead the whole time.",
+            Bio = "Same league, same gyms, same dream - except he's been one step ahead the whole time. Tonight, that ends.",
             LossLine = "Huh. Guess you earned it.",
             WinLine = "Still not there. Come back when you're ready.",
             IsSmartFighter = true
@@ -532,6 +597,7 @@ public class GameManager : MonoBehaviour
             case AchievementMetric.BecameChampion: return HasBecomeChampion() ? 1 : 0;
             case AchievementMetric.DefeatedRival: return HasDefeatedRival ? 1 : 0;
             case AchievementMetric.DefeatedSecretFighter: return HasDefeatedSecretFighter ? 1 : 0;
+            case AchievementMetric.DefeatedMirrorMatch: return HasDefeatedShadowChampion ? 1 : 0;
             default: return 0;
         }
     }
@@ -715,7 +781,8 @@ public class GameManager : MonoBehaviour
             SubmissionWins = SubmissionWins,
             UnlockedAchievementIds = unlockedAchievementIds.ToList(),
             HallOfChampions = hallOfChampions.ToList(),
-            HasSeenRivalIntro = hasSeenRivalIntro
+            HasSeenRivalIntro = hasSeenRivalIntro,
+            CurrentWinStreak = CurrentWinStreak
         };
 
         SaveSystem.Save(data);
@@ -788,6 +855,7 @@ public class GameManager : MonoBehaviour
         TotalItemsUsed = Mathf.Max(0, data.TotalItemsUsed);
         MaxSingleHitDamage = Mathf.Max(0, data.MaxSingleHitDamage);
         SubmissionWins = Mathf.Max(0, data.SubmissionWins);
+        CurrentWinStreak = Mathf.Max(0, data.CurrentWinStreak);
 
         unlockedAchievementIds.Clear();
         if (data.UnlockedAchievementIds != null)
@@ -802,15 +870,17 @@ public class GameManager : MonoBehaviour
         // instead of showing a "rookie" greeting mid-career.
         hasSeenRivalIntro = data.HasSeenRivalIntro || TotalWins > 0 || completedGymIds.Count > 0 || hallOfChampions.Count > 0;
 
-        // Milestone 34: IsGymUnlocked now also requires HasDefeatedRival for the
-        // Championship Gym. Saves from before this milestone never fought Scratch,
-        // so without this, a player who already became champion (or already
-        // owns a Hall of Champions entry) would suddenly find the Championship
-        // Gym re-locked and lose access to the existing leader-rematch feature.
-        // Grandfather them in - they already proved themselves.
-        if (!HasDefeatedRival && (completedGymIds.Contains("championship_gym") || hallOfChampions.Count > 0))
-            defeatedOpponentIds.Add(RivalFightOpponentId);
-
+        // Milestone 39: the old Milestone 34 grandfather-in here assumed
+        // becoming champion implied the rival was already beaten (true only
+        // under the old pre-Championship gating it was patching for). Under
+        // the new post-Championship ordering that assumption is backwards, so
+        // it's removed - a save that's already champion but never fought
+        // Scratch (including saves from before the rival fight existed at
+        // all) now correctly sees the new Rival Showdown banner instead of
+        // being silently credited with a fight that never happened. Nothing
+        // already unlocked (Championship Gym, Shadow Champion, Hall of
+        // Champions entries) is affected, since none of those depend on
+        // HasDefeatedRival anymore.
         return true;
     }
 

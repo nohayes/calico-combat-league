@@ -42,7 +42,10 @@ public static class AchievementDatabase
         {
             Id = "rival_defeated",
             Name = "Talent Doesn't Ask Permission",
-            Description = "Defeat Rival Scratch and earn your shot at the Championship.",
+            // Milestone 39: was "...and earn your shot at the Championship" -
+            // backwards now that the showdown happens after the Championship,
+            // not before it.
+            Description = "Defeat Rival Scratch and prove you're the best in the league.",
             Metric = AchievementMetric.DefeatedRival,
             TargetValue = 1
         },
@@ -52,6 +55,14 @@ public static class AchievementDatabase
             Name = "Champion",
             Description = "Defeat the final gym and become champion.",
             Metric = AchievementMetric.BecameChampion,
+            TargetValue = 1
+        },
+        new AchievementData
+        {
+            Id = "mirror_match_defeated",
+            Name = "True Champion",
+            Description = "Defeat the Mirror Match - the true final test, after Rival Scratch.",
+            Metric = AchievementMetric.DefeatedMirrorMatch,
             TargetValue = 1
         },
         new AchievementData

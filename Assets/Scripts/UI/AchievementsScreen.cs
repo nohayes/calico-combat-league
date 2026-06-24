@@ -73,8 +73,13 @@ public class AchievementsScreen : UIScreen
             unlocked ? UIFactory.GoldColor : UIFactory.MutedTextColor, TextAnchor.MiddleLeft,
             new Vector2(0.17f, 0.7f), new Vector2(0.68f, 0.94f), FontStyle.Bold);
 
-        UIFactory.CreateText(card, achievement.Name, UIFactory.BodySize, nameColor, TextAnchor.MiddleLeft,
+        // Font System Overhaul, Part 3: explicit override - achievement names
+        // are called out specifically for the UI font (ProtestGuerrilla-Regular
+        // as of the Font Replacement Pass), but this row's BodySize (tuned for
+        // the row's height) maps to the dialogue font by default.
+        var nameText = UIFactory.CreateText(card, achievement.Name, UIFactory.BodySize, nameColor, TextAnchor.MiddleLeft,
             new Vector2(0.17f, 0.38f), new Vector2(0.68f, 0.72f), FontStyle.Bold);
+        nameText.font = UIFactory.UiFont;
 
         UIFactory.CreateCaption(card, achievement.Description, new Vector2(0.17f, 0.05f), new Vector2(0.68f, 0.4f));
 

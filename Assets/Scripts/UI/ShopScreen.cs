@@ -7,16 +7,10 @@ public class ShopScreen : UIScreen
     readonly Text headerText;
     readonly Transform listContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
-    readonly Image avatarImage;
-    readonly PlayerAvatarVisual avatarVisual;
 
     public ShopScreen(Transform parent, GameManager gm) : base(parent, gm, "ShopScreen", "gym_map")
     {
         UIFactory.CreateHeading(Root.transform, "SHOP", new Vector2(0.05f, 0.9f), new Vector2(0.76f, 0.98f));
-
-        // Milestone 25, Part 4: small fighter-identity badge.
-        var avatarMarker = UIFactory.CreateAvatarMarker(Root.transform, "Player", new Vector2(0.79f, 0.9f), new Vector2(0.95f, 0.98f), out avatarImage);
-        avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
 
         headerText = UIFactory.CreateText(Root.transform, "", UIFactory.SubheadingSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.15f, 0.82f), new Vector2(0.85f, 0.89f));
@@ -40,9 +34,6 @@ public class ShopScreen : UIScreen
         }
 
         headerText.text = $"Coins: {GM.Player.Stats.Coins}";
-
-        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
-        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
 
         var items = ItemDatabase.All;
         for (int i = 0; i < items.Count; i++)
@@ -76,6 +67,13 @@ public class ShopScreen : UIScreen
         int owned = GM.GetItemQuantity(item.Id);
         var label = UIFactory.CreateText(card, $"{item.Name}  (owned: {owned})\n{item.Description}", UIFactory.CaptionSize,
             UIFactory.CreamColor, TextAnchor.MiddleLeft, new Vector2(0.17f, 0f), new Vector2(0.6f, 1f));
+        // Quick Fix (Font Replacement Pass), Part 5: two fixed lines (name+owned,
+        // description) in a single list-row's height - PatrickHandSC-Regular's
+        // wider glyphs raise the odds of the description wrapping further than
+        // this row allows.
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = 10;
+        label.resizeTextMaxSize = UIFactory.CaptionSize;
         dynamicEntries.Add(label.gameObject);
 
         var buyButton = UIFactory.CreateButton(card, $"Buy {item.Cost}c", new Vector2(0.63f, 0.14f), new Vector2(0.97f, 0.86f),

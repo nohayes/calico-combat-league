@@ -48,4 +48,9 @@ public class SaveData
     // GameManager.LoadGame backfills it to true for saves that already have
     // progress, so returning players don't get a "rookie" greeting mid-career.
     public bool HasSeenRivalIntro;
+
+    // Milestone 36: current consecutive-win streak, for the Tale of the Tape's
+    // "Win Streak" readout. Missing on older saves -> defaults to 0, which is
+    // correct (a fresh streak, not a fabricated one).
+    public int CurrentWinStreak;
 }

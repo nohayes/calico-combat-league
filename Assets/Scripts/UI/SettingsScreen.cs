@@ -10,6 +10,12 @@ public class SettingsScreen : UIScreen
     readonly Text sfxValue;
     readonly Text fullscreenValue;
 
+    // Quick Fix (Global Audio Settings Button): true only when opened via the
+    // new global corner button rather than the normal Main Menu navigation -
+    // lets BACK return to whatever screen was actually showing (this screen
+    // was never hidden, just covered) instead of always jumping to MainMenu.
+    bool shownAsOverlay;
+
     public SettingsScreen(Transform parent, GameManager gm) : base(parent, gm, "SettingsScreen", "gym_map")
     {
         UIFactory.CreateHeading(Root.transform, "AUDIO SETTINGS", new Vector2(0.05f, 0.86f), new Vector2(0.95f, 0.96f));
@@ -31,7 +37,32 @@ public class SettingsScreen : UIScreen
             new Vector2(0.1f, 0.1f), new Vector2(0.9f, 0.155f), TextAnchor.MiddleCenter);
 
         UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.3f, 0.02f), new Vector2(0.7f, 0.09f),
-            () => GM.ChangeState(GameState.MainMenu), UIFactory.SecondaryColor, isBackAction: true);
+            () => CloseOrBackToMainMenu(), UIFactory.SecondaryColor, isBackAction: true);
+    }
+
+    // Quick Fix (Global Audio Settings Button): opens this screen as an
+    // overlay on top of whatever screen is currently showing, without going
+    // through GameManager.ChangeState - the underlying screen (e.g. an
+    // in-progress Battle) is never hidden or refreshed, just covered.
+    public void ShowAsOverlay()
+    {
+        shownAsOverlay = true;
+        BringToFront();
+        SetVisible(true);
+        Refresh();
+    }
+
+    void CloseOrBackToMainMenu()
+    {
+        if (shownAsOverlay)
+        {
+            shownAsOverlay = false;
+            SetVisible(false);
+        }
+        else
+        {
+            GM.ChangeState(GameState.MainMenu);
+        }
     }
 
     Text CreateVolumeRow(string label, float yMin, UnityEngine.Events.UnityAction decrease,

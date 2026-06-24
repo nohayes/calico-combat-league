@@ -52,6 +52,13 @@ public static class RivalDatabase
         }
     }
 
+    // Milestone 39, Part 4: a distinct, more dramatic nickname for the Tale of
+    // the Tape specifically - "The Rival" (still used elsewhere) reads fine as
+    // a relationship label, but the true final fight calls for something with
+    // more weight. Ties back to his own Description ("the fighter the whole
+    // league has been comparing you to since day one").
+    public static string GetShowdownNickname() => "The Measuring Stick";
+
     // Part 6: a narrative-only record - not simulated, just scaled to always
     // read as "a little ahead of you" so the rival feels skilled, not unbeatable.
     public static string GetRivalRecord(GameManager gm)
@@ -69,7 +76,10 @@ public static class RivalDatabase
     public static string GetRivalStatus(GameManager gm)
     {
         if (gm == null) return "Somewhere, training.";
-        if (gm.HasBecomeChampion()) return "Waiting at the Finals.";
+        // Milestone 39: the showdown now happens after the Championship, so
+        // the rival's status tracks toward THAT instead of gating it.
+        if (gm.HasDefeatedRival) return "Back to training. You're the one to beat now.";
+        if (gm.HasBecomeChampion()) return "Waiting for you. This is it.";
 
         if (gm.TotalWins > 0 && gm.TotalWins % 7 == 0)
             return GetCutawayLine(gm.TotalWins);
@@ -82,9 +92,7 @@ public static class RivalDatabase
             case 1: return "Training at the Muay Thai Gym.";
             case 2: return "Training at the Wrestling Gym.";
             case 3: return "Preparing for the BJJ Academy.";
-            // Milestone 34: this window covers "BJJ cleared, Championship not
-            // cleared yet" - which is exactly the Rival Showdown gate.
-            default: return gm.HasDefeatedRival ? "Waiting at the Championship Gym." : "Waiting for you. This is it.";
+            default: return "Already qualified for the Finals. Hurry up.";
         }
     }
 
@@ -119,24 +127,58 @@ public static class RivalDatabase
         return new[] { $"Level {level} already? ...Fine. Maybe you're not hopeless." };
     }
 
-    // Milestone 34, Part 2: shown once, right before the Rival Showdown fight
-    // itself - the payoff to four milestones of buildup.
+    // Milestone 39, Part 1/6: shown once, on the Championship screen right
+    // after the player becomes champion - the storyline's big reveal that the
+    // belt was never the true final test. A proper multi-stage conversation
+    // (ChampionshipScreen), distinct from the shorter challenge lines below
+    // (shown later, whenever the player actually starts the fight).
+    public static readonly string[] ShowdownArrivalLines =
+    {
+        "You finally made it.",
+        "I was wondering if you'd actually get here.",
+        "I've been waiting.",
+        "Everyone else in this league was just practice. You know that, right?",
+        "The belt's nice. But it was never the real test. I am.",
+        "Go celebrate. Catch your breath. Then come find me."
+    };
+
+    // Milestone 39, Part 6: shown each time the player actually starts the
+    // fight from the Rival Showdown banner - short and direct, since the big
+    // reveal already happened in ShowdownArrivalLines.
     public static readonly string[] ShowdownIntroLines =
     {
-        "You finally caught up.",
         "Let's see if you're actually good.",
         "No more speeches. Fight me."
     };
 
-    // Milestone 34, Part 8: shown when the player wins the Rival Showdown.
-    public static readonly string[] RivalDefeatedLines =
+    // Milestone 43: now wired into the Rival Showdown specifically
+    // (BattleScreen) - each line is tied to one trigger moment, indexed by
+    // the TauntXxx constants in BattleScreen, so a taunt reads as reactive
+    // rather than random. The original 3 lines are kept (now Player
+    // Struggling / Rival Defense / Rival Struggling); 3 new ones added for
+    // Player Combo / Rival Combo / Final Phase.
+    public static readonly string[] ShowdownTaunts =
     {
-        "Huh.",
-        "Guess you earned it.",
-        "Don't get comfortable."
+        "That's all you've got?",                  // 0: player below half health
+        "There you are.",                           // 1: rival parries/clinches the player
+        "Now you're fighting like a champion.",     // 2: rival below half health
+        "That combo almost looked intentional.",    // 3: player lands a combo
+        "You feel that? That's pressure.",          // 4: rival lands a combo
+        "Don't blink now."                          // 5: final low-health phase
     };
 
-    // Milestone 34, Part 9: shown when Scratch wins the Rival Showdown -
+    // Milestone 39, Part 7: shown when the player wins the Rival Showdown -
+    // real closure, not just a shrug. This is the line the whole game has
+    // been building toward.
+    public static readonly string[] RivalDefeatedLines =
+    {
+        "...Huh.",
+        "Yeah. Okay. You got me.",
+        "You're the best in the league now. I mean that.",
+        "Don't get comfortable - I'll be training. But tonight's yours."
+    };
+
+    // Milestone 39, Part 7: shown when Scratch wins the Rival Showdown -
     // encouraging, not punishing. The player can simply challenge him again.
     public static readonly string[] RivalVictoryLines =
     {
@@ -145,11 +187,6 @@ public static class RivalDatabase
         "You almost had me."
     };
 
-    // Part 6: shown once on the Championship screen - anticipation, not a fight.
-    public static string GetShowdownLine()
-    {
-        return "...So you really did it. Champion. Don't get comfortable - I didn't train this hard to fight someone ELSE for that belt. You and me. Soon.";
-    }
 
     // Part 5/8: an occasional, non-gym-clear comment on the Victory screen, paced
     // off the existing TotalWins counter so it needs no new saved state and never
@@ -164,8 +201,14 @@ public static class RivalDatabase
     public static string GetLine(GameManager gm)
     {
         if (gm == null) return "";
+        // Milestone 39: the rival fight is now AFTER the championship, so this
+        // line (shown picking a gym, after becoming champion but before
+        // beating Scratch) points at the real final test instead of one
+        // that's already behind the player.
+        if (gm.HasDefeatedRival)
+            return "Enjoy the view from the top. Earned it.";
         if (gm.HasBecomeChampion())
-            return "...Fine. You're the real deal. For now. See you at the championship, for real this time.";
+            return "...Fine. You're the real deal. The belt proves that much. I'm still the real test.";
         if (gm.TotalGymsCleared > 0)
             return "Okay, you're for real. Don't get comfortable.";
         if (gm.TotalWins > 0)

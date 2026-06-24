@@ -74,6 +74,43 @@ public static class IconFactory
         }
     }
 
+    // Milestone 41, Part 2: small bracketed tags ([Starter], [Finisher], ...)
+    // for the Moves Screen and move-selection buttons - a short label plus a
+    // distinct color per category, same pattern as every other theme-color
+    // helper in this file.
+    public static string GetMoveCategoryLabel(MoveCategory category)
+    {
+        switch (category)
+        {
+            case MoveCategory.Starter: return "Starter";
+            case MoveCategory.Finisher: return "Finisher";
+            case MoveCategory.Pressure: return "Pressure";
+            case MoveCategory.Control: return "Control";
+            case MoveCategory.Submission: return "Submission";
+            case MoveCategory.Defensive: return "Defensive";
+            case MoveCategory.Combo: return "Combo";
+            default: return "";
+        }
+    }
+
+    public static Color GetMoveCategoryColor(MoveCategory category)
+    {
+        switch (category)
+        {
+            case MoveCategory.Starter: return new Color(0.55f, 0.75f, 0.95f, 1f);
+            case MoveCategory.Finisher: return new Color(0.92f, 0.32f, 0.28f, 1f);
+            case MoveCategory.Pressure: return UIFactory.AccentOrange;
+            case MoveCategory.Control: return new Color(0.55f, 0.65f, 0.4f, 1f);
+            case MoveCategory.Submission: return new Color(0.68f, 0.42f, 0.88f, 1f);
+            // Typography pass: PositiveColor is too dark/desaturated for
+            // small text on the same near-black fill used everywhere this
+            // tag appears - swapped for a brighter, equally distinct mint.
+            case MoveCategory.Defensive: return new Color(0.45f, 0.85f, 0.65f, 1f);
+            case MoveCategory.Combo: return UIFactory.GoldColor;
+            default: return UIFactory.MutedTextColor;
+        }
+    }
+
     public static ArchetypeType GetPortraitArchetype(GymType type)
     {
         switch (type)

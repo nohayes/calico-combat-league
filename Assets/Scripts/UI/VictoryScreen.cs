@@ -28,11 +28,24 @@ public class VictoryScreen : UIScreen
 
         highlightText = UIFactory.CreateText(Root.transform, "", UIFactory.SubheadingSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.42f, 0.58f), new Vector2(0.97f, 0.68f), FontStyle.Bold);
+        // Quick Fix (Font Replacement Pass), Part 5: this box can accumulate
+        // several appended lines (gym-cleared/unlock callouts plus the
+        // opponent's parting quote), and PatrickHandSC-Regular's wider glyphs
+        // raise the odds of overflowing this fairly tight box.
+        highlightText.resizeTextForBestFit = true;
+        highlightText.resizeTextMinSize = 14;
+        highlightText.resizeTextMaxSize = UIFactory.SubheadingSize;
 
         rewardCard = UIFactory.CreateCard(Root.transform, "Reward", new Vector2(0.42f, 0.26f), new Vector2(0.97f, 0.55f));
         rewardGroup = rewardCard.gameObject.AddComponent<CanvasGroup>();
         rewardText = UIFactory.CreateText(rewardCard, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.MiddleCenter,
             new Vector2(0.03f, 0.03f), new Vector2(0.97f, 0.97f));
+        // Typography pass: this accumulates several reward stat lines
+        // (XP/Coins/Level/Turns/Combo) with no safety net previously - adding
+        // the same best-fit protection every other accumulator text already has.
+        rewardText.resizeTextForBestFit = true;
+        rewardText.resizeTextMinSize = 14;
+        rewardText.resizeTextMaxSize = UIFactory.BodySize;
 
         UIFactory.CreateButton(Root.transform, "RETURN TO MAP", new Vector2(0.50f, 0.09f), new Vector2(0.89f, 0.21f),
             () => GM.ReturnToMap(), UIFactory.PositiveColor);
@@ -59,10 +72,13 @@ public class VictoryScreen : UIScreen
         else if (gymCleared) AudioManager.Instance?.PlayGymCleared();
         else AudioManager.Instance?.PlayVictory();
 
-        PlayCelebration(shadowVictory ? 30 : (rivalVictory ? 26 : (gymCleared ? 24 : 16)));
+        // Milestone 44: Mirror Match's reward gets deliberately LESS
+        // celebration than Rival's, not more - "quiet, strange, reflective"
+        // instead of loud, per the brief's contrast between the two.
+        PlayCelebration(shadowVictory ? 14 : (rivalVictory ? 26 : (gymCleared ? 24 : 16)));
         var headingText = victoryHeading.GetComponent<Text>();
-        headingText.text = shadowVictory ? "YOU DEFEATED YOUR SHADOW" : rivalVictory ? "RIVAL DEFEATED" : "VICTORY!";
-        PlayPulse(victoryHeading, shadowVictory ? 1.2f : rivalVictory ? 1.18f : (gymCleared ? 1.12f : 1.08f), shadowVictory ? 0.65f : 0.55f);
+        headingText.text = shadowVictory ? "YOU DEFEATED YOURSELF" : rivalVictory ? "RIVAL DEFEATED" : "VICTORY!";
+        PlayPulse(victoryHeading, shadowVictory ? 1.1f : rivalVictory ? 1.18f : (gymCleared ? 1.12f : 1.08f), shadowVictory ? 0.5f : 0.55f);
         PlayReveal(rewardGroup, rewardCard, 0.22f, 0.38f);
 
         highlightText.text = "";
@@ -129,16 +145,24 @@ public class VictoryScreen : UIScreen
             AppendHighlightLine("GYM CLEARED!");
         }
 
-        // Milestone 34, Part 10: the Rival Showdown's actual unlock effect is
-        // just IsGymUnlocked now also passing for the Championship Gym (see
-        // GameManager) - this is purely the messaging for that, reusing the
-        // exact same highlight-reveal beat as every other big moment here.
+        // Milestone 39, Part 7: the Rival Showdown is now the storyline's
+        // actual closure (fought after the Championship, not a gate before
+        // it) - real "you made it" payoff messaging instead of the old
+        // "unlocked the next thing" framing.
         if (rivalVictory)
         {
             yield return new WaitForSecondsRealtime(0.3f);
-            AppendHighlightLine("CHAMPIONSHIP UNLOCKED!");
+            AppendHighlightLine("YOU FINALLY SURPASSED SCRATCH");
             yield return new WaitForSecondsRealtime(0.2f);
-            AppendHighlightLine("The road to the title is open.");
+            AppendHighlightLine("THE BEST IN THE LEAGUE");
+        }
+
+        // Milestone 44, Reward: the brief's own reward heading, shown as a
+        // highlight beat the same way Rival's payoff lines are.
+        if (shadowVictory)
+        {
+            yield return new WaitForSecondsRealtime(0.3f);
+            AppendHighlightLine("TRUE CHAMPION");
         }
 
         // Milestone 22: the opponent gets the last word - their reaction to losing.
@@ -152,7 +176,15 @@ public class VictoryScreen : UIScreen
         if (shadowVictory)
         {
             yield return new WaitForSecondsRealtime(0.4f);
-            AppendHighlightLine("TITLE EARNED: \"SHADOW SLAYER\"");
+            AppendHighlightLine("TITLE EARNED: \"TRUE CHAMPION\"");
+        }
+
+        // Milestone 39, Part 9: mirrors the Shadow Slayer reveal above - the
+        // Hall of Champions title GameManager.RecordRivalVictoryLegacy just added.
+        if (rivalVictory)
+        {
+            yield return new WaitForSecondsRealtime(0.4f);
+            AppendHighlightLine("TITLE EARNED: \"RIVAL CONQUEROR\"");
         }
 
         // Milestone 33/34, Part 3/4/8: the rival reacts to defeating HIM (the

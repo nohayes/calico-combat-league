@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
 {
@@ -42,8 +43,37 @@ public class UIManager : MonoBehaviour
         settingsScreen = new SettingsScreen(transform, gm);
         streetFightScreen = new StreetFightScreen(transform, gm);
 
+        CreateGlobalAudioButton();
+
         gm.OnStateChanged += HandleStateChanged;
         HandleStateChanged(gm.State);
+    }
+
+    // Quick Fix (Global Audio Settings Button): one small, always-available
+    // corner button that opens the existing SettingsScreen as an overlay,
+    // added once here rather than duplicated on every individual screen.
+    // Created last so it's the last sibling under UIManager - rendering above
+    // every screen above. Tucked into the corner past every screen's existing
+    // header/title margin (none of them use the 0.955-1.0 x/y pocket), so it
+    // never overlaps the Fight Night intro card, billing text, or move
+    // buttons on any screen, Battle included.
+    void CreateGlobalAudioButton()
+    {
+        var button = UIFactory.CreateCardButton(transform, "AudioSettings", new Vector2(0.955f, 0.945f), new Vector2(0.995f, 0.985f),
+            () => settingsScreen.ShowAsOverlay(), new Color(0.08f, 0.07f, 0.07f, 0.4f));
+
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconGo.transform.SetParent(button.transform, false);
+        var iconRt = iconGo.GetComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0.2f, 0.2f);
+        iconRt.anchorMax = new Vector2(0.8f, 0.8f);
+        iconRt.offsetMin = Vector2.zero;
+        iconRt.offsetMax = Vector2.zero;
+        var icon = iconGo.GetComponent<Image>();
+        icon.sprite = IconFactory.GetShapeSprite(IconShape.Circle);
+        icon.color = new Color(1f, 1f, 1f, 0.55f);
+        icon.preserveAspect = true;
+        icon.raycastTarget = false;
     }
 
     void HandleStateChanged(GameState state)
@@ -72,6 +102,9 @@ public class UIManager : MonoBehaviour
         {
             case GameState.MainMenu:
                 mainMenu.Refresh();
+                break;
+            case GameState.FighterCreation:
+                fighterCreation.Refresh();
                 break;
             case GameState.GymMap:
                 gymMap.Refresh();

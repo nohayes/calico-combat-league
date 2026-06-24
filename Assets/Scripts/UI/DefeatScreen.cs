@@ -50,6 +50,11 @@ public class DefeatScreen : UIScreen
         // Milestone 22: the opponent's reaction to beating the player.
         opponentLineText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.42f, 0.30f), new Vector2(0.97f, 0.38f), TextAnchor.MiddleCenter);
         opponentLineText.color = UIFactory.GoldColor;
+        // Typography pass: 8pt was the smallest text anywhere in the app -
+        // below comfortable reading size for an actual sentence of dialogue.
+        // Raised to a still-protective but legible floor; the WinLine quote
+        // itself stays as-is (no content changes).
+        opponentLineText.resizeTextMinSize = 12;
 
         // Milestone 32, Part 8: XP/coins earned, if any - currently a defeat
         // always grants 0 of both, so this stays hidden in practice, but it's

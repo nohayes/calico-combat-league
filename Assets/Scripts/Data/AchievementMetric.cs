@@ -11,5 +11,6 @@ public enum AchievementMetric
     MovesKnown,
     BecameChampion,
     DefeatedRival,
-    DefeatedSecretFighter
+    DefeatedSecretFighter,
+    DefeatedMirrorMatch
 }

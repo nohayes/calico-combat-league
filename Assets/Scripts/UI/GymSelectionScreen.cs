@@ -3,37 +3,36 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Home Screen Redesign: the gym list + avatar-travel logic that used to live on
-// the Home/Map screen now lives here, reached via the Home hub's FIGHT button.
-// Logic is unchanged from before, just relocated to its own "world map" screen.
+// Gym Selection Redesign: a centered 3x2 card grid (Boxing/Muay Thai/Wrestling
+// on top, BJJ/Championship/Street Fight below) instead of the old stretched
+// full-width row list. The old vertical "travel rail" avatar doesn't fit a
+// grid and isn't part of the reference layout, so it's been removed; clicking
+// a card now transitions directly instead of walking there first.
+// Milestone 39: the Championship card is always a normal gym card now - the
+// Rival Showdown (formerly slotted into that card while gating it) moved to
+// its own banner below the grid, alongside the Shadow Gym's.
 public class GymSelectionScreen : UIScreen
 {
-    readonly Transform listContainer;
     readonly List<GameObject> dynamicEntries = new List<GameObject>();
     readonly Text rivalText;
     // Milestone 25, Part 5: ephemeral (not saved) tracking so a gym that just
     // became unlocked gets a one-time "reveal" pulse instead of silently
-    // appearing as "Available" - pure UI flourish, GameManager's unlock logic
-    // (IsGymUnlocked) is the single source of truth and is never touched.
+    // appearing as available - pure UI flourish, GameManager's unlock logic
+    // is the single source of truth and is never touched.
     readonly HashSet<string> seenUnlockedGymIds = new HashSet<string>();
 
-    readonly RectTransform avatarMarker;
-    readonly Image avatarImage;
-    readonly PlayerAvatarVisual avatarVisual;
-    int avatarGymIndex = -1;
-    bool traveling;
-
     // Milestone 33, Part 4: a brief rival intercept the first time a gym other
-    // than the very first becomes newly unlocked. Set during the row-build
+    // than the very first becomes newly unlocked. Set during the card-build
     // loop, consumed once at the end of Refresh() so it can't pop up mid-layout.
     readonly RivalDialogueBox rivalDialogue;
     GymInfo pendingInterceptGym;
 
-    const float TravelDuration = 0.4f;
-    const float ListMinY = 0.14f;
-    const float ListMaxY = 0.78f;
-    const float RailXMin = 0.935f;
-    const float RailXMax = 0.985f;
+    const int Columns = 3;
+    const float GridXMin = 0.05f;
+    const float GridXMax = 0.95f;
+    const float GridTop = 0.78f;
+    const float ColumnGap = 0.018f;
+    const float RowGap = 0.035f;
 
     public GymSelectionScreen(Transform parent, GameManager gm) : base(parent, gm, "GymSelectionScreen", "gym_map")
     {
@@ -42,14 +41,13 @@ public class GymSelectionScreen : UIScreen
         // Milestone 22, Part 7: a small recurring rival comments on your progress
         // while you pick your next gym. Reuses existing GameManager stats only.
         rivalText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.06f, 0.8f), new Vector2(0.94f, 0.87f), TextAnchor.MiddleCenter);
-        rivalText.color = UIFactory.MutedTextColor;
-
-        // Landscape Conversion: a touch wider now that 16:9 has the room.
-        listContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.05f, ListMinY), new Vector2(0.93f, ListMaxY));
-
-        avatarMarker = UIFactory.CreateAvatarMarker(Root.transform, "MapTraveler",
-            new Vector2(RailXMin, 0.6f), new Vector2(RailXMax, 0.68f), out avatarImage);
-        avatarVisual = avatarMarker.gameObject.AddComponent<PlayerAvatarVisual>();
+        // Typography pass: this carries real narrative weight (the rival
+        // tracker status, including "this is it" right before the showdown
+        // becomes available) but read as throwaway muted caption text.
+        // Same box, just a brighter color and a higher best-fit ceiling.
+        rivalText.color = UIFactory.GoldColor;
+        rivalText.resizeTextMinSize = 13;
+        rivalText.resizeTextMaxSize = UIFactory.BodySize;
 
         UIFactory.CreateButton(Root.transform, "BACK TO HOME", new Vector2(0.3f, 0.03f), new Vector2(0.7f, 0.12f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
@@ -70,20 +68,38 @@ public class GymSelectionScreen : UIScreen
             return;
         }
 
-        // Milestone 26: a secret extra row appears only after the Championship
-        // Gym is cleared. Folding it into the same row-math as the real gyms
-        // (rather than a fixed overlay) means it never overlaps them.
-        bool shadowUnlocked = GM.HasBecomeChampion();
-        // Milestone 30 (relocation): Street Fight moved here from the Home
-        // screen as a first-class progression option, always last in the list.
-        int totalRows = gyms.Count + (shadowUnlocked ? 1 : 0) + 1;
+        // Milestone 26: the Mirror Match banner (formerly "Shadow Gym") only
+        // appears below the grid, never as a 7th grid card. Milestone 44: its
+        // gate moved from "became champion" to "defeated Rival Scratch" - it's
+        // now the true final test, available only after both the Championship
+        // and the Rival are behind the player. Milestone 39: the Rival
+        // Showdown banner lives in this same strip while it's still available.
+        // Since Mirror Match now requires the Rival already defeated, the two
+        // banners are mutually exclusive in practice - this never shows both -
+        // but the stacking math is left in place rather than torn out, since
+        // it's harmless and still correct if that ever changes.
+        bool mirrorMatchReady = GM.HasDefeatedRival;
+        bool rivalShowdownReady = GM.IsRivalFightReady();
+        int bannerCount = (rivalShowdownReady ? 1 : 0) + (mirrorMatchReady ? 1 : 0);
+        float gridBottom = bannerCount == 0 ? 0.16f : bannerCount == 1 ? 0.235f : 0.325f;
 
         for (int i = 0; i < gyms.Count; i++)
         {
-            BuildGymRow(gyms[i], i, totalRows);
+            BuildGymCard(gyms[i], i, gridBottom);
         }
-        if (shadowUnlocked) BuildShadowRow(gyms.Count, totalRows);
-        BuildStreetFightRow(totalRows - 1, totalRows);
+        BuildStreetFightCard(gyms.Count, gridBottom);
+
+        // Rival Showdown takes the slot closer to the grid (encountered
+        // first); Mirror Match keeps its original slot at the very bottom so
+        // its position doesn't shift if the rival banner is ever visible too.
+        const float bannerHeight = 0.065f;
+        const float bannerGap = 0.02f;
+        float lowerSlot = 0.16f;
+        float upperSlot = lowerSlot + bannerHeight + bannerGap;
+        if (rivalShowdownReady)
+            BuildRivalShowdownBanner(new Vector2(0.05f, upperSlot), new Vector2(0.95f, upperSlot + bannerHeight));
+        if (mirrorMatchReady)
+            BuildShadowBanner(new Vector2(0.05f, lowerSlot), new Vector2(0.95f, lowerSlot + bannerHeight));
 
         // Milestone 33, Part 2/5: the rival's existing progress quip plus the
         // Rival Tracker status, so this screen doubles as "world presence."
@@ -95,204 +111,263 @@ public class GymSelectionScreen : UIScreen
             pendingInterceptGym = null;
             RunAnimation(ShowGymInterceptDelayed(gym));
         }
-
-        avatarMarker.gameObject.SetActive(GM.Player != null);
-        if (GM.Player == null) return;
-
-        traveling = false;
-        if (avatarGymIndex < 0) avatarGymIndex = Mathf.Clamp(GM.TotalGymsCleared, 0, gyms.Count - 1);
-        avatarGymIndex = Mathf.Clamp(avatarGymIndex, 0, gyms.Count - 1);
-
-        Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
-        avatarVisual.Initialize(avatarImage, GM.Player.Archetype, theme, faceRight: true);
-        SnapAvatarToRow(avatarGymIndex, totalRows);
     }
 
-    // A mirror of BuildGymRow's visuals, styled to feel mysterious rather than
-    // like a normal gym - same button/icon helpers, no new UI primitives.
-    void BuildShadowRow(int index, int totalRows)
+    // 3 columns x 2 fixed rows, evenly spaced and centered between GridXMin/Max.
+    void GetCardAnchors(int index, float gridBottom, out Vector2 anchorMin, out Vector2 anchorMax)
+    {
+        int row = index / Columns;
+        int col = index % Columns;
+
+        float cardWidth = (GridXMax - GridXMin - (Columns - 1) * ColumnGap) / Columns;
+        float xMin = GridXMin + col * (cardWidth + ColumnGap);
+
+        float gridHeight = GridTop - gridBottom;
+        float rowHeight = (gridHeight - RowGap) / 2f;
+        float yMax = GridTop - row * (rowHeight + RowGap);
+
+        anchorMin = new Vector2(xMin, yMax - rowHeight);
+        anchorMax = new Vector2(xMin + cardWidth, yMax);
+    }
+
+    // Milestone 39: the Championship card is a normal gym card again - the
+    // Rival Showdown moved out to its own banner below the grid (see Refresh/
+    // BuildRivalShowdownBanner) since it's now a post-Championship encounter,
+    // not a gate blocking this card.
+    void BuildGymCard(GymInfo gym, int index, float gridBottom)
+    {
+        bool unlocked = GM.IsGymUnlocked(gym);
+        bool completed = GM.IsGymCompleted(gym);
+
+        string name = gym.GymName;
+        string description = gym.Description;
+        string tagline;
+        Color taglineColor;
+        Color accentColor;
+        string badgeText;
+        Sprite iconSprite;
+        Color iconColor;
+        bool interactable = unlocked;
+
+        if (completed)
+        {
+            tagline = "Cleared";
+            taglineColor = UIFactory.PositiveColor;
+            accentColor = UIFactory.PositiveColor;
+            badgeText = "CLEARED";
+        }
+        else if (unlocked)
+        {
+            tagline = !string.IsNullOrEmpty(gym.Motto) ? gym.Motto : "Available";
+            taglineColor = IconFactory.GetGymThemeColor(gym.GymType);
+            accentColor = UIFactory.AccentOrange;
+            badgeText = "SELECTED";
+        }
+        else
+        {
+            tagline = "Locked";
+            taglineColor = UIFactory.DangerColor;
+            accentColor = UIFactory.LockedColor;
+            badgeText = "LOCKED";
+        }
+
+        var realIcon = ArtRegistry.GetGymIcon(gym.GymId);
+        iconSprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
+        iconColor = interactable ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+
+        GetCardAnchors(index, gridBottom, out Vector2 anchorMin, out Vector2 anchorMax);
+        var cardButton = BuildCard(anchorMin, anchorMax, accentColor, interactable,
+            () => TravelToGym(gym),
+            iconSprite, iconColor, name, tagline, taglineColor, description, badgeText, accentColor);
+
+        if (interactable && seenUnlockedGymIds.Add(gym.GymId))
+        {
+            PlayPulse((RectTransform)cardButton.transform, 1.05f, 0.5f);
+            // Milestone 33, Part 4: skip the very first gym - the rival's
+            // FirstAppearanceLines greeting on the Home screen already covers
+            // the start of the run.
+            if (unlocked && index > 0) pendingInterceptGym = gym;
+        }
+    }
+
+    // Milestone 30 (relocation): Street Fight as a first-class progression
+    // option alongside the gyms - same card style, always available, no lock
+    // state, no badge (mirrors the reference layout exactly).
+    void BuildStreetFightCard(int index, float gridBottom)
+    {
+        GetCardAnchors(index, gridBottom, out Vector2 anchorMin, out Vector2 anchorMax);
+        var iconSprite = IconFactory.GetShapeSprite(IconShape.Diamond);
+
+        BuildCard(anchorMin, anchorMax, UIFactory.AccentOrange, true,
+            () => GM.ChangeState(GameState.StreetFight),
+            iconSprite, UIFactory.CreamColor, "STREET FIGHT", null, UIFactory.MutedTextColor,
+            "Random opponents.\nRisk and reward.\nTrain outside the gym system.", null, UIFactory.AccentOrange);
+    }
+
+    // Shared card chrome: a colored border card with an inset dark fill, an
+    // icon, a name, an optional tagline, a description, and an optional status
+    // badge pill. Built on CreateCardButton/CreateCard/CreateText only - no
+    // new visual primitives. The border card IS the button, so hovering it
+    // brightens the border itself (Unity's built-in Selectable tint) for the
+    // "hover glow/outline" effect, and Selectable already dims it automatically
+    // when interactable is false (the "locked cards are dimmed" requirement).
+    Button BuildCard(Vector2 anchorMin, Vector2 anchorMax, Color borderColor, bool interactable,
+        UnityEngine.Events.UnityAction onClick, Sprite iconSprite, Color iconColor,
+        string name, string tagline, Color taglineColor, string description, string badgeText, Color badgeColor)
+    {
+        var border = UIFactory.CreateCardButton(Root.transform, name, anchorMin, anchorMax, onClick, borderColor);
+        border.interactable = interactable;
+        dynamicEntries.Add(border.gameObject);
+
+        var fill = UIFactory.CreateCard(border.transform, name + "Fill", new Vector2(0.025f, 0.035f), new Vector2(0.975f, 0.965f),
+            new Color(0.07f, 0.06f, 0.06f, 0.97f));
+        fill.GetComponent<Image>().raycastTarget = false;
+
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconGo.transform.SetParent(fill, false);
+        var iconRt = iconGo.GetComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0.05f, 0.66f);
+        iconRt.anchorMax = new Vector2(0.22f, 0.92f);
+        iconRt.offsetMin = Vector2.zero;
+        iconRt.offsetMax = Vector2.zero;
+        var iconImage = iconGo.GetComponent<Image>();
+        iconImage.sprite = iconSprite;
+        iconImage.color = iconColor;
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+
+        var nameText = UIFactory.CreateText(fill, name, UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
+            new Vector2(0.26f, 0.66f), new Vector2(0.97f, 0.92f), FontStyle.Bold);
+        nameText.resizeTextForBestFit = true;
+        nameText.resizeTextMinSize = 14;
+        nameText.resizeTextMaxSize = UIFactory.BodySize;
+        nameText.raycastTarget = false;
+
+        float descTop = 0.6f;
+        if (!string.IsNullOrEmpty(tagline))
+        {
+            var taglineText = UIFactory.CreateText(fill, tagline, UIFactory.CaptionSize, taglineColor, TextAnchor.UpperLeft,
+                new Vector2(0.07f, 0.5f), new Vector2(0.95f, 0.62f), FontStyle.Bold);
+            taglineText.raycastTarget = false;
+            // Quick Fix (Font Replacement Pass), Part 5: mottos/taglines are
+            // short but PatrickHandSC-Regular's wider glyphs can still push a
+            // longer one (e.g. a gym motto) past this single-line band.
+            taglineText.resizeTextForBestFit = true;
+            taglineText.resizeTextMinSize = 12;
+            taglineText.resizeTextMaxSize = UIFactory.CaptionSize;
+            descTop = 0.5f;
+        }
+
+        var descText = UIFactory.CreateText(fill, description ?? "", UIFactory.CaptionSize, UIFactory.CreamColor, TextAnchor.UpperLeft,
+            new Vector2(0.07f, 0.16f), new Vector2(0.95f, descTop));
+        descText.raycastTarget = false;
+        // Quick Fix (Font Replacement Pass), Part 5: gym descriptions are full
+        // sentences in a fixed-height card region - guards against the wider
+        // handwritten font wrapping to more lines than this card allows.
+        descText.resizeTextForBestFit = true;
+        descText.resizeTextMinSize = 12;
+        descText.resizeTextMaxSize = UIFactory.CaptionSize;
+
+        if (!string.IsNullOrEmpty(badgeText))
+        {
+            var badge = UIFactory.CreateCard(fill, "Badge", new Vector2(0.07f, 0.04f), new Vector2(0.5f, 0.13f),
+                new Color(badgeColor.r, badgeColor.g, badgeColor.b, 0.22f));
+            badge.GetComponent<Image>().raycastTarget = false;
+            var badgeLabel = UIFactory.CreateText(badge, badgeText, UIFactory.CaptionSize, badgeColor, TextAnchor.MiddleCenter,
+                Vector2.zero, Vector2.one, FontStyle.Bold);
+            badgeLabel.resizeTextForBestFit = true;
+            badgeLabel.resizeTextMinSize = 11;
+            badgeLabel.resizeTextMaxSize = UIFactory.CaptionSize;
+            badgeLabel.raycastTarget = false;
+        }
+
+        return border;
+    }
+
+    // A thin full-width strip below the grid rather than a 3rd grid row -
+    // this is a rare, late-game secret, not part of the normal 6-card layout.
+    // Milestone 39: now takes explicit anchors so it can sit in either the
+    // single-banner or stacked-with-rival-banner slot (see Refresh).
+    // Milestone 44: presentation renamed from "The Shadow Gym" to "Mirror
+    // Match" - a quiet silver-grey instead of the old purple, matching the
+    // brief's "quiet, strange, reflective" tone (distinct from the Rival
+    // Showdown banner's loud violet just above it).
+    void BuildShadowBanner(Vector2 anchorMin, Vector2 anchorMax)
     {
         bool defeated = GM.HasDefeatedShadowChampion;
-        string tagline = defeated ? "Defeated - \"Shadow Slayer\" earned" : "A reflection awaits...";
-        string label = $"THE SHADOW GYM\n{tagline}";
+        string tagline = defeated ? "Defeated - \"True Champion\" earned" : "The final test awaits...";
+        Color color = defeated ? UIFactory.PositiveColor : new Color(0.55f, 0.6f, 0.68f, 1f);
 
-        GetRowAnchors(index, totalRows, out float yMin, out float yMax);
-
-        Color color = defeated ? UIFactory.PositiveColor : new Color(0.22f, 0.05f, 0.3f, 1f);
-        var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.06f, yMin), new Vector2(0.94f, yMax),
-            () => TravelToShadowChampion(index, totalRows), color);
+        var button = UIFactory.CreateCardButton(Root.transform, "MirrorMatch", anchorMin, anchorMax,
+            () => TravelToShadowChampion(), color);
         dynamicEntries.Add(button.gameObject);
 
-        if (!defeated) PlayPulse((RectTransform)button.transform, 1.06f, 0.7f);
-
-        var labelText = button.GetComponentInChildren<Text>();
-        labelText.rectTransform.anchorMin = new Vector2(0.24f, 0f);
-        labelText.rectTransform.anchorMax = new Vector2(0.97f, 1f);
-        labelText.alignment = TextAnchor.MiddleLeft;
+        if (!defeated) PlayPulse((RectTransform)button.transform, 1.04f, 0.7f);
 
         var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         iconGo.transform.SetParent(button.transform, false);
         var iconRt = iconGo.GetComponent<RectTransform>();
-        iconRt.anchorMin = new Vector2(0.04f, 0.18f);
-        iconRt.anchorMax = new Vector2(0.2f, 0.82f);
+        iconRt.anchorMin = new Vector2(0.012f, 0.15f);
+        iconRt.anchorMax = new Vector2(0.05f, 0.85f);
         iconRt.offsetMin = Vector2.zero;
         iconRt.offsetMax = Vector2.zero;
         var iconImage = iconGo.GetComponent<Image>();
         iconImage.sprite = IconFactory.GetShapeSprite(IconShape.Star);
         iconImage.color = UIFactory.GoldColor;
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+
+        var label = UIFactory.CreateText(button.transform, $"MIRROR MATCH  -  {tagline}", UIFactory.BodySize, UIFactory.CreamColor,
+            TextAnchor.MiddleLeft, new Vector2(0.07f, 0f), new Vector2(0.97f, 1f), FontStyle.Bold);
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = 12;
+        label.resizeTextMaxSize = UIFactory.BodySize;
+        label.raycastTarget = false;
     }
 
-    void TravelToShadowChampion(int index, int totalRows)
+    // Milestone 39, Part 1/2: the league's true final test - appears once the
+    // player becomes champion, replacing the old "blocks the Championship
+    // card" presentation with its own banner below the grid (same pattern as
+    // the Shadow Gym banner), and disappears once Scratch is defeated.
+    void BuildRivalShowdownBanner(Vector2 anchorMin, Vector2 anchorMax)
     {
-        if (traveling) return;
-        traveling = true;
-
-        GetRowAnchors(index, totalRows, out float yMin, out float yMax);
-        Vector2 targetMin = new Vector2(RailXMin, RootYFromListY(yMin));
-        Vector2 targetMax = new Vector2(RailXMax, RootYFromListY(yMax));
-
-        avatarVisual.MoveToAnchor(targetMin, targetMax, TravelDuration, () =>
-        {
-            traveling = false;
-            GM.StartShadowChampionBattle();
-        });
-    }
-
-    // Milestone 30 (relocation): Street Fight as a first-class progression
-    // option alongside the gyms - same row/button/icon pattern as BuildGymRow,
-    // just always available (no lock state) and not tied to GymDatabase.
-    void BuildStreetFightRow(int index, int totalRows)
-    {
-        string label = "STREET FIGHT\nRandom opponents.\nRisk and reward.\nTrain outside the gym system.";
-
-        GetRowAnchors(index, totalRows, out float yMin, out float yMax);
-
-        var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.06f, yMin), new Vector2(0.94f, yMax),
-            () => GM.ChangeState(GameState.StreetFight), UIFactory.AccentOrange);
+        var button = UIFactory.CreateCardButton(Root.transform, "RivalShowdown", anchorMin, anchorMax,
+            () => TravelToRivalFight(), RivalDatabase.AccentColor);
         dynamicEntries.Add(button.gameObject);
 
-        var labelText = button.GetComponentInChildren<Text>();
-        labelText.rectTransform.anchorMin = new Vector2(0.24f, 0f);
-        labelText.rectTransform.anchorMax = new Vector2(0.97f, 1f);
-        labelText.alignment = TextAnchor.MiddleLeft;
+        if (seenUnlockedGymIds.Add("rival_showdown_ready"))
+            PlayPulse((RectTransform)button.transform, 1.06f, 0.7f);
 
         var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         iconGo.transform.SetParent(button.transform, false);
         var iconRt = iconGo.GetComponent<RectTransform>();
-        iconRt.anchorMin = new Vector2(0.04f, 0.18f);
-        iconRt.anchorMax = new Vector2(0.2f, 0.82f);
+        iconRt.anchorMin = new Vector2(0.012f, 0.15f);
+        iconRt.anchorMax = new Vector2(0.05f, 0.85f);
         iconRt.offsetMin = Vector2.zero;
         iconRt.offsetMax = Vector2.zero;
         var iconImage = iconGo.GetComponent<Image>();
-        iconImage.sprite = IconFactory.GetShapeSprite(IconShape.Diamond);
-        iconImage.color = UIFactory.CreamColor;
+        iconImage.sprite = IconFactory.GetShapeSprite(IconShape.Star);
+        iconImage.color = RivalDatabase.AccentColor;
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+
+        var label = UIFactory.CreateText(button.transform, $"RIVAL SHOWDOWN  -  {RivalDatabase.RivalName} is waiting.",
+            UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.MiddleLeft, new Vector2(0.07f, 0f), new Vector2(0.97f, 1f), FontStyle.Bold);
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = 12;
+        label.resizeTextMaxSize = UIFactory.BodySize;
+        label.raycastTarget = false;
     }
 
-    void BuildGymRow(GymInfo gym, int index, int totalGyms)
-    {
-        // Milestone 34, Part 1: in the gap between "BJJ cleared" and "rival
-        // defeated," the Championship row becomes the Rival Showdown instead
-        // of a locked gym - same row, same travel rail, different destination.
-        bool rivalFightReady = GM.IsRivalFightReady(gym);
-        bool unlocked = GM.IsGymUnlocked(gym);
-        bool completed = GM.IsGymCompleted(gym);
+    void TravelToGym(GymInfo gym) => GM.EnterGym(gym);
 
-        string label;
-        Color color;
-        if (rivalFightReady)
-        {
-            label = "RIVAL SHOWDOWN\nScratch is waiting.";
-            color = RivalDatabase.AccentColor;
-        }
-        else
-        {
-            string tagline = completed ? "Cleared" : (unlocked && !string.IsNullOrEmpty(gym.Motto) ? gym.Motto : (unlocked ? "Available" : "Locked"));
-            label = $"{gym.GymName}\n{tagline}";
-            color = completed ? UIFactory.PositiveColor : (unlocked ? IconFactory.GetGymThemeColor(gym.GymType) : UIFactory.LockedColor);
-        }
+    // Milestone 34, Part 1/2: shows the showdown intro encounter, then starts
+    // the fight directly when the player taps through the last line -
+    // RivalDialogueBox's own onComplete callback, no extra coroutine needed.
+    void TravelToRivalFight() =>
+        rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.ShowdownIntroLines, () => GM.StartRivalFight());
 
-        GetRowAnchors(index, totalGyms, out float yMin, out float yMax);
-
-        var button = UIFactory.CreateButton(listContainer, label, new Vector2(0.06f, yMin), new Vector2(0.94f, yMax),
-            () => { if (rivalFightReady) TravelToRivalFight(index, totalGyms); else TravelToGym(gym, index, totalGyms); }, color);
-        button.interactable = unlocked || rivalFightReady;
-        dynamicEntries.Add(button.gameObject);
-
-        if (rivalFightReady && seenUnlockedGymIds.Add(gym.GymId + "_rival_ready"))
-            PlayPulse((RectTransform)button.transform, 1.1f, 0.6f);
-
-        if (unlocked && seenUnlockedGymIds.Add(gym.GymId))
-        {
-            PlayPulse((RectTransform)button.transform, 1.08f, 0.5f);
-            // Milestone 33, Part 4: skip the very first gym - the rival's
-            // FirstAppearanceLines greeting on the Home screen already covers
-            // the start of the run.
-            if (index > 0) pendingInterceptGym = gym;
-        }
-
-        // Make room for an icon on the left of the auto-generated label.
-        var labelText = button.GetComponentInChildren<Text>();
-        labelText.rectTransform.anchorMin = new Vector2(0.24f, 0f);
-        labelText.rectTransform.anchorMax = new Vector2(0.97f, 1f);
-        labelText.alignment = TextAnchor.MiddleLeft;
-
-        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        iconGo.transform.SetParent(button.transform, false);
-        var iconRt = iconGo.GetComponent<RectTransform>();
-        iconRt.anchorMin = new Vector2(0.04f, 0.18f);
-        iconRt.anchorMax = new Vector2(0.2f, 0.82f);
-        iconRt.offsetMin = Vector2.zero;
-        iconRt.offsetMax = Vector2.zero;
-        var iconImage = iconGo.GetComponent<Image>();
-        if (rivalFightReady)
-        {
-            iconImage.sprite = IconFactory.GetShapeSprite(IconShape.Star);
-            iconImage.color = RivalDatabase.AccentColor;
-        }
-        else
-        {
-            var realIcon = ArtRegistry.GetGymIcon(gym.GymId);
-            iconImage.sprite = realIcon != null ? realIcon : IconFactory.GetShapeSprite(IconFactory.GetGymIconShape(gym.GymType));
-            iconImage.color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.5f);
-        }
-    }
-
-    void TravelToGym(GymInfo gym, int index, int totalGyms)
-    {
-        if (traveling) return;
-        traveling = true;
-
-        GetRowAnchors(index, totalGyms, out float yMin, out float yMax);
-        Vector2 targetMin = new Vector2(RailXMin, RootYFromListY(yMin));
-        Vector2 targetMax = new Vector2(RailXMax, RootYFromListY(yMax));
-
-        avatarVisual.MoveToAnchor(targetMin, targetMax, TravelDuration, () =>
-        {
-            traveling = false;
-            avatarGymIndex = index;
-            GM.EnterGym(gym);
-        });
-    }
-
-    // Milestone 34, Part 1/2: travels to the Championship row's position, then
-    // plays the showdown intro encounter, then starts the fight directly when
-    // the player taps through the last line - RivalDialogueBox's own
-    // onComplete callback, no extra coroutine needed.
-    void TravelToRivalFight(int index, int totalGyms)
-    {
-        if (traveling) return;
-        traveling = true;
-
-        GetRowAnchors(index, totalGyms, out float yMin, out float yMax);
-        Vector2 targetMin = new Vector2(RailXMin, RootYFromListY(yMin));
-        Vector2 targetMax = new Vector2(RailXMax, RootYFromListY(yMax));
-
-        avatarVisual.MoveToAnchor(targetMin, targetMax, TravelDuration, () =>
-        {
-            traveling = false;
-            rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.ShowdownIntroLines, () => GM.StartRivalFight());
-        });
-    }
+    void TravelToShadowChampion() => GM.StartShadowChampionBattle();
 
     // Milestone 33, Part 4: a short pause after the screen settles, same
     // pattern GymMapScreen's first-appearance greeting already uses.
@@ -301,21 +376,4 @@ public class GymSelectionScreen : UIScreen
         yield return new WaitForSecondsRealtime(0.5f);
         rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.GetGymInterceptLines(gym));
     }
-
-    void SnapAvatarToRow(int index, int totalGyms)
-    {
-        GetRowAnchors(index, totalGyms, out float yMin, out float yMax);
-        avatarMarker.anchorMin = new Vector2(RailXMin, RootYFromListY(yMin));
-        avatarMarker.anchorMax = new Vector2(RailXMax, RootYFromListY(yMax));
-    }
-
-    static void GetRowAnchors(int index, int total, out float yMin, out float yMax)
-    {
-        float slotHeight = 1f / total;
-        float padding = slotHeight * 0.14f;
-        yMax = 1f - index * slotHeight - padding;
-        yMin = 1f - (index + 1) * slotHeight + padding;
-    }
-
-    static float RootYFromListY(float listY) => ListMinY + listY * (ListMaxY - ListMinY);
 }

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,6 +11,7 @@ public class ChampionshipScreen : UIScreen
     readonly RectTransform infoCard;
     readonly CanvasGroup infoGroup;
     readonly BattleFighterVisual championVisual;
+    readonly RivalDialogueBox rivalDialogue;
 
     public ChampionshipScreen(Transform parent, GameManager gm) : base(parent, gm, "ChampionshipScreen", "championship")
     {
@@ -44,6 +46,10 @@ public class ChampionshipScreen : UIScreen
 
         UIFactory.CreateButton(Root.transform, "CONTINUE", new Vector2(0.40f, 0.02f), new Vector2(0.97f, 0.09f),
             () => GM.ReturnToMap(), UIFactory.PositiveColor);
+
+        // Milestone 39, Part 1: the storyline's big reveal - Scratch
+        // interrupting what would otherwise read as "the end."
+        rivalDialogue = UIFactory.CreateRivalDialogue(Root.transform);
     }
 
     public void Refresh()
@@ -82,7 +88,21 @@ public class ChampionshipScreen : UIScreen
         // waiting, reinforcing the showdown tease right after it.
         infoText.text += $"\n\nWord is {RivalDatabase.RivalName} already qualified for the Finals.";
 
-        // Milestone 29, Part 6: the rival's showdown tease - anticipation only, no fight added.
-        infoText.text += $"\n\n{RivalDatabase.RivalName}: \"{RivalDatabase.GetShowdownLine()}\"";
+        // Milestone 39, Part 1: replaces the old static one-line tease
+        // (GetShowdownLine) with the real multi-stage arrival event - fires
+        // once, since this screen itself is only ever reached once per
+        // playthrough (becoming champion a second time routes to Victory,
+        // not here). Only relevant if the rival fight hasn't happened yet -
+        // a save that already defeated Scratch before reaching this screen
+        // for the first time (see GameManager's save-compatibility notes)
+        // skips the tease and goes straight to "you're the champion."
+        if (!GM.HasDefeatedRival)
+            RunAnimation(ShowRivalArrivalDelayed());
+    }
+
+    IEnumerator ShowRivalArrivalDelayed()
+    {
+        yield return new WaitForSecondsRealtime(0.8f);
+        rivalDialogue.Show(RivalDatabase.RivalName, RivalDatabase.ShowdownArrivalLines);
     }
 }

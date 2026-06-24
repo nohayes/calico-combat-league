@@ -31,6 +31,12 @@ public class ProfileScreen : UIScreen
 
         flavorQuoteText = UIFactory.CreateText(Root.transform, "", UIFactory.CaptionSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.06f, 0.68f), new Vector2(0.94f, 0.73f), FontStyle.Italic);
+        // Quick Fix (Font Replacement Pass), Part 5: archetype flavor quotes
+        // sit in a very short single-line band - PatrickHandSC-Regular's
+        // wider glyphs raise the odds of wrapping past this box's height.
+        flavorQuoteText.resizeTextForBestFit = true;
+        flavorQuoteText.resizeTextMinSize = 10;
+        flavorQuoteText.resizeTextMaxSize = UIFactory.CaptionSize;
 
         UIFactory.CreateCard(Root.transform, "Stats", new Vector2(0.06f, 0.32f), new Vector2(0.94f, 0.66f));
         statsText = UIFactory.CreateText(Root.transform, "", UIFactory.CaptionSize, UIFactory.CreamColor, TextAnchor.UpperLeft,

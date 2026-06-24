@@ -2,9 +2,14 @@ using System.Collections.Generic;
 
 public static class ItemDatabase
 {
+    // Economy tuning (World Polish Pass): was 30 coins for 20 stamina (0.667/
+    // coin) against Large's 55 for 40 (0.727/coin) - Small was strictly worse
+    // value with no upside, making it a dead item nobody would ever buy.
+    // Lowered to 20 coins (1.0 stamina/coin) so it has a real niche - best
+    // value per coin for players who can't yet afford Large's bulk amount.
     public static readonly ItemData SmallEnergyDrink = new ItemData(
         "small_energy_drink", "Small Energy Drink", "Restores a small amount of stamina.",
-        cost: 30, effectType: ItemEffectType.RestoreStamina, effectAmount: 20);
+        cost: 20, effectType: ItemEffectType.RestoreStamina, effectAmount: 20);
 
     public static readonly ItemData LargeEnergyDrink = new ItemData(
         "large_energy_drink", "Large Energy Drink", "Restores a large amount of stamina.",
