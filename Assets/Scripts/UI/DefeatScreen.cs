@@ -85,10 +85,14 @@ public class DefeatScreen : UIScreen
         string tip = Tips[Mathf.Abs(GM.TotalLosses) % Tips.Length];
         tipText.text = $"No penalty - your fighter is fully rested back at the map.\n{tip}";
 
+        // Milestone 45, Part 6: Prestige always shown here (even on a 0-reward
+        // defeat, which is the normal case) for consistent display wherever
+        // Prestige appears.
+        string prestigeLine = PrestigeSystem.FormatLevel(GM.PrestigeLevel);
         if (GM.LastRewardXP > 0 || GM.LastRewardCoins > 0)
-            rewardText.text = $"Earned: +{GM.LastRewardXP} XP, +{GM.LastRewardCoins} Coins";
+            rewardText.text = $"Earned: +{GM.LastRewardXP} XP, +{GM.LastRewardCoins} Coins\n{prestigeLine}";
         else
-            rewardText.text = "";
+            rewardText.text = prestigeLine;
 
         bool rivalDefeat = GM.CurrentOpponentInfo?.OpponentId == GameManager.RivalFightOpponentId;
 
@@ -105,6 +109,10 @@ public class DefeatScreen : UIScreen
             Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
             defeatedVisual.Initialize(defeatedSprite, "player", GM.Player.Archetype, theme, faceRight: true);
             defeatedVisual.PlayDefeatPose();
+            // Milestone 46, Part 4: large character display - Defeat Screen.
+            // A tattoo is a permanent career mark, so it still shows even on
+            // a loss - it isn't earned or lost by any single fight's outcome.
+            UIFactory.ApplyPrestigeTattoo(defeatedSprite, GM.PrestigeLevel);
         }
     }
 

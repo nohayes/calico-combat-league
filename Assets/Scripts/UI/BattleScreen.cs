@@ -451,6 +451,10 @@ public class BattleScreen : UIScreen
         introPlayerPortrait.color = playerPortrait.color;
         introOpponentPortrait.sprite = opponentPortrait.sprite;
         introOpponentPortrait.color = opponentPortrait.color;
+        // Milestone 46, Part 4: large character display - Tale of the Tape.
+        // Player only - the tattoo represents the player's own career, not
+        // an opponent's (Mirror Match's opponent is presentational only here).
+        UIFactory.ApplyPrestigeTattoo(introPlayerPortrait, GM.PrestigeLevel);
         RefreshIdentityText();
 
         bool championshipFight = IsChampionshipFight();
@@ -773,8 +777,12 @@ public class BattleScreen : UIScreen
         FightPresentationGenerator.GetFlavorStats(gm.Player.Archetype, "player_" + gm.Player.Archetype, gm.HasBecomeChampion(),
             out int playerAge, out int playerReach, out string playerStyle);
 
+        // Milestone 45, Part 6: appended onto the existing archetype/level
+        // line rather than as its own line - this block is already the
+        // densest text in the game (5 lines via best-fit), and one consistent
+        // format (PrestigeSystem.FormatLevel) used everywhere Prestige shows.
         introPlayerName.text =
-            $"{gm.Player.Name}\n\"{playerNickname}\"\n{playerArchetype}  -  Lv.{gm.Player.Stats.Level}\n" +
+            $"{gm.Player.Name}\n\"{playerNickname}\"\n{playerArchetype}  -  Lv.{gm.Player.Stats.Level}  -  {PrestigeSystem.FormatLevel(gm.PrestigeLevel)}\n" +
             $"{playerRecord}{(string.IsNullOrEmpty(playerStreak) ? "" : "  (" + playerStreak + ")")}\n" +
             FightPresentationGenerator.FormatFlavorLine(playerAge, playerReach, playerStyle);
 

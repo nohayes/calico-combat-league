@@ -40,6 +40,18 @@ public class GameManager : MonoBehaviour
     // Milestone 36: consecutive-win streak for the Tale of the Tape's "Win
     // Streak" readout - incremented on a win, reset on a loss, in EndBattle.
     public int CurrentWinStreak { get; private set; }
+
+    // Milestone 45 (Prestige / New Game+) - Part 9's "local score foundation."
+    public int PrestigeLevel { get; private set; }
+    public int TotalGameCompletions { get; private set; }
+    public int HighestPrestigeReached { get; private set; }
+
+    // Part 1: Mirror Match defeated is the official "Game Completed" condition.
+    public bool IsGameCompleted => HasDefeatedShadowChampion;
+    // Part 2: capped via the one centralized constant - never compare against
+    // a literal 10 anywhere else.
+    public bool CanPrestige => IsGameCompleted && PrestigeLevel < PrestigeSystem.MaxPrestigeLevel;
+
     public int TotalDamageDealt { get; private set; }
     public int TotalDamageTaken { get; private set; }
     public int TotalCoinsEarned { get; private set; }
@@ -122,6 +134,14 @@ public class GameManager : MonoBehaviour
         combatBuffActive = false;
         activeCombatBuffAmount = 0;
         hasSeenRivalIntro = false;
+        // Milestone 46: a true New Game (distinct from Prestige, which
+        // deliberately keeps these) starts at Prestige 0 - without this, a
+        // returning player's leftover in-memory PrestigeLevel from a
+        // previous career could otherwise make Character Creation's tattoo
+        // preview show a tattoo on a fighter who hasn't earned anything yet.
+        PrestigeLevel = 0;
+        TotalGameCompletions = 0;
+        HighestPrestigeReached = 0;
         Player = FighterData.CreateNewPlayer(name, archetype);
         SaveGame();
         ChangeState(GameState.GymMap);
@@ -242,6 +262,14 @@ public class GameManager : MonoBehaviour
             opponentStats.Submission = Mathf.RoundToInt(opponentStats.Submission * RematchStatMultiplier);
             opponentStats.ResetForBattle();
         }
+
+        // Milestone 45, Part 5: the one shared chokepoint every opponent's
+        // stats pass through before a fight starts - PrestigeSystem.ApplyScaling
+        // is a no-op at PrestigeLevel 0, so this has zero effect until the
+        // player actually prestiges. Stacks with the rematch boost above
+        // (orthogonal concepts - "already beat this leader" vs "Nth full
+        // playthrough" - rather than one superseding the other).
+        PrestigeSystem.ApplyScaling(opponentStats, PrestigeLevel);
 
         CurrentOpponent = new FighterData(opponent.Name, opponentStats, opponent.Moves) { IsSmartFighter = opponent.IsSmartFighter };
         CurrentBattle = new BattleSystem(Player, CurrentOpponent);
@@ -448,6 +476,56 @@ public class GameManager : MonoBehaviour
             // new victories from here on get the new title.
             Title = "True Champion"
         });
+
+        // Milestone 45, Part 9: this only runs once per genuinely new
+        // completion - EndBattle's alreadyDefeatedShadowChampion guard
+        // already prevents this whole method from re-firing on a repeat win
+        // within the same Prestige cycle, so this counter can't double-count.
+        TotalGameCompletions++;
+    }
+
+    // Milestone 45, Part 3/4: the Prestige action itself - confirmation is
+    // owned by the calling UI (ProfileScreen); this method assumes the
+    // player has already confirmed and just performs the reset/increment.
+    public void PerformPrestige()
+    {
+        if (!CanPrestige) return;
+
+        PrestigeLevel = Mathf.Min(PrestigeLevel + 1, PrestigeSystem.MaxPrestigeLevel);
+        HighestPrestigeReached = Mathf.Max(HighestPrestigeReached, PrestigeLevel);
+
+        // Part 4 - RESET: gym progress, defeated opponents (which is also
+        // what HasBecomeChampion/HasDefeatedRival/HasDefeatedShadowChampion/
+        // HasDefeatedSecretFighter all read from, so clearing this one set
+        // already resets Championship/Rival/Mirror Match progress with no
+        // separate flags to touch), and the current run's rival-intro flag
+        // so the narrative beats play again from the top.
+        completedGymIds.Clear();
+        defeatedOpponentIds.Clear();
+        hasSeenRivalIntro = false;
+
+        // Part 4 - KEEP (everything NOT touched above): Level/XP/StatPoints/
+        // Stats/Coins/Archetype (Player.Stats itself is never reset here),
+        // KnownMoves/EquippedMoves, inventory, unlockedAchievementIds,
+        // hallOfChampions, every lifetime statistic, and PrestigeLevel.
+
+        // Part 7: a permanent record of the cycle just completed, same
+        // existing ChampionRecord/Title infrastructure as Shadow Slayer/
+        // Rival Conqueror/True Champion above - added once per Prestige
+        // action, never spammed (this method only runs on an explicit,
+        // confirmed player action).
+        hallOfChampions.Add(new ChampionRecord
+        {
+            FighterName = Player.Name,
+            Archetype = Player.Archetype.ToString(),
+            FinalLevel = Player.Stats.Level,
+            TotalWinsAtCompletion = TotalWins,
+            CompletionDate = DateTime.Now.ToString("yyyy-MM-dd"),
+            Title = $"Completed {PrestigeSystem.FormatLevel(PrestigeLevel)}"
+        });
+
+        SaveGame();
+        ChangeState(GameState.GymMap);
     }
 
     // Milestone 39, Part 9: the Rival Showdown's own permanent legacy entry -
@@ -782,7 +860,10 @@ public class GameManager : MonoBehaviour
             UnlockedAchievementIds = unlockedAchievementIds.ToList(),
             HallOfChampions = hallOfChampions.ToList(),
             HasSeenRivalIntro = hasSeenRivalIntro,
-            CurrentWinStreak = CurrentWinStreak
+            CurrentWinStreak = CurrentWinStreak,
+            PrestigeLevel = PrestigeLevel,
+            TotalGameCompletions = TotalGameCompletions,
+            HighestPrestigeReached = HighestPrestigeReached
         };
 
         SaveSystem.Save(data);
@@ -856,6 +937,9 @@ public class GameManager : MonoBehaviour
         MaxSingleHitDamage = Mathf.Max(0, data.MaxSingleHitDamage);
         SubmissionWins = Mathf.Max(0, data.SubmissionWins);
         CurrentWinStreak = Mathf.Max(0, data.CurrentWinStreak);
+        PrestigeLevel = Mathf.Clamp(data.PrestigeLevel, 0, PrestigeSystem.MaxPrestigeLevel);
+        TotalGameCompletions = Mathf.Max(0, data.TotalGameCompletions);
+        HighestPrestigeReached = Mathf.Max(PrestigeLevel, Mathf.Max(0, data.HighestPrestigeReached));
 
         unlockedAchievementIds.Clear();
         if (data.UnlockedAchievementIds != null)
@@ -868,7 +952,15 @@ public class GameManager : MonoBehaviour
         // Milestone 29: saves from before this milestone default to false here.
         // If the fighter already has progress, treat the rival as already met
         // instead of showing a "rookie" greeting mid-career.
-        hasSeenRivalIntro = data.HasSeenRivalIntro || TotalWins > 0 || completedGymIds.Count > 0 || hallOfChampions.Count > 0;
+        // Milestone 45: scoped to PrestigeLevel == 0 - this migration heuristic
+        // only ever applied to pre-Prestige saves (PrestigeLevel didn't exist
+        // before this milestone, so any such save is necessarily at 0).
+        // Without this, hallOfChampions.Count > 0 (always true after a
+        // Prestige cycle, since every cycle adds an entry) would silently
+        // override the explicit "false" PerformPrestige just set, defeating
+        // its own "see the rival's intro again in the new league" intent.
+        hasSeenRivalIntro = data.HasSeenRivalIntro ||
+            (PrestigeLevel == 0 && (TotalWins > 0 || completedGymIds.Count > 0 || hallOfChampions.Count > 0));
 
         // Milestone 39: the old Milestone 34 grandfather-in here assumed
         // becoming champion implied the rival was already beaten (true only

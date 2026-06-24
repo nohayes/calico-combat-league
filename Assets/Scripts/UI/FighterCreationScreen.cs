@@ -152,6 +152,13 @@ public class FighterCreationScreen : UIScreen
         spriteImage.preserveAspect = true;
         spriteImage.raycastTarget = false;
         UIFactory.SetFighterPortrait(spriteImage, GetSelectFighterId(info.Type), info.Type, theme);
+        // Milestone 46, Part 4: "Character Creation Preview (if technically
+        // safe)" - technically safe (same shared helper, no archetype
+        // dependency), but this screen is only ever reached via a true New
+        // Game, which now resets PrestigeLevel to 0 (see GameManager), so in
+        // practice this will never actually show a tattoo. Wired anyway for
+        // consistency in case that ever changes.
+        UIFactory.ApplyPrestigeTattoo(spriteImage, GM.PrestigeLevel);
 
         // Name, centered, directly under the fighter.
         var nameText = UIFactory.CreateText(slotContainer, info.DisplayName, UIFactory.BodySize, UIFactory.CreamColor,

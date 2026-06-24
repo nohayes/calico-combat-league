@@ -132,6 +132,14 @@ public static class ArtRegistry
     public static Sprite GetMoveIcon(string moveId) =>
         Load(string.IsNullOrEmpty(moveId) ? null : $"Art/Icons/move_{moveId}");
 
+    // Milestone 46: the one centralized Prestige-tattoo lookup (Part 2/6) -
+    // Prestige 0, or any level beyond what's actually been uploaded, simply
+    // has no matching file, so Load's existing null-on-missing-asset
+    // behavior already means "no tattoo" with zero special-casing here.
+    // Adding prestige_11.png etc. later needs no code change anywhere.
+    public static Sprite GetPrestigeTattoo(int prestigeLevel) =>
+        Load($"Art/PrestigeTattoos/prestige_{prestigeLevel}");
+
     // Milestone 17: the world-traveling avatar (Hub, Gym Map, Gym Entry) has its own
     // art slot, distinct from in-battle portraits/sprites, so a future artist can
     // give the avatar a dedicated look without touching battle presentation.

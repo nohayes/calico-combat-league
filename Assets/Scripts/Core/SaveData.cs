@@ -53,4 +53,14 @@ public class SaveData
     // "Win Streak" readout. Missing on older saves -> defaults to 0, which is
     // correct (a fresh streak, not a fabricated one).
     public int CurrentWinStreak;
+
+    // Milestone 45 (Prestige / New Game+). Missing on older saves -> all
+    // default to 0, which is exactly correct: a save that predates Prestige
+    // has never prestiged and has completed the game zero times by this
+    // counter's definition (TotalGameCompletions only increments on a fresh
+    // Mirror Match victory going forward - it doesn't retroactively credit
+    // a pre-existing HasDefeatedShadowChampion=true from before this milestone).
+    public int PrestigeLevel;
+    public int TotalGameCompletions;
+    public int HighestPrestigeReached;
 }

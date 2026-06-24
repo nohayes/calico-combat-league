@@ -9,6 +9,8 @@ public class ProfileScreen : UIScreen
     readonly Text flavorQuoteText;
     readonly Text statsText;
     readonly Text statusText;
+    readonly Button prestigeButton;
+    readonly RectTransform prestigeConfirmPanel;
 
     public ProfileScreen(Transform parent, GameManager gm) : base(parent, gm, "ProfileScreen", "gym_map")
     {
@@ -49,15 +51,59 @@ public class ProfileScreen : UIScreen
         // Profile is the management hub: Stats, Moves, and Hall of Fame are all
         // reachable from here (Hall of Fame and Moves no longer have their own
         // buttons on the Home screen).
-        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.03f, 0.03f), new Vector2(0.25f, 0.13f),
+        // Milestone 45, Part 3: row recomputed for 5 even columns (was 4) to
+        // make room for PRESTIGE - chosen over Hall of Champions per the
+        // brief's "fewest changes" guidance, since this row already exists
+        // and just needed one more evenly-spaced slot.
+        UIFactory.CreateButton(Root.transform, "STATS", new Vector2(0.03f, 0.03f), new Vector2(0.202f, 0.13f),
             () => GM.ChangeState(GameState.StatsScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.27f, 0.03f), new Vector2(0.49f, 0.13f),
+        UIFactory.CreateButton(Root.transform, "MOVES", new Vector2(0.222f, 0.03f), new Vector2(0.394f, 0.13f),
             () => GM.ChangeState(GameState.MovesScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.51f, 0.03f), new Vector2(0.73f, 0.13f),
+        prestigeButton = UIFactory.CreateButton(Root.transform, "PRESTIGE", new Vector2(0.414f, 0.03f), new Vector2(0.586f, 0.13f),
+            () => ShowPrestigeConfirm(), UIFactory.DangerColor);
+        UIFactory.CreateButton(Root.transform, "HALL OF FAME", new Vector2(0.606f, 0.03f), new Vector2(0.778f, 0.13f),
             () => GM.ChangeState(GameState.HallOfChampionsScreen), UIFactory.SecondaryColor);
-        UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.75f, 0.03f), new Vector2(0.97f, 0.13f),
+        UIFactory.CreateButton(Root.transform, "BACK", new Vector2(0.798f, 0.03f), new Vector2(0.97f, 0.13f),
             () => GM.ChangeState(GameState.GymMap), UIFactory.SecondaryColor, isBackAction: true);
+
+        prestigeConfirmPanel = BuildPrestigeConfirmPanel();
     }
+
+    // Milestone 45, Part 4: a major, irreversible action - requires an
+    // explicit confirm step, built as a simple toggle-shown panel (same
+    // pattern BattleScreen's item panel already uses) rather than a new
+    // dialogue system. Lists exactly what's kept vs reset per the brief.
+    RectTransform BuildPrestigeConfirmPanel()
+    {
+        var panel = UIFactory.CreateCard(Root.transform, "PrestigeConfirm", new Vector2(0.12f, 0.2f), new Vector2(0.88f, 0.8f),
+            new Color(0.1f, 0.08f, 0.06f, 0.99f));
+
+        UIFactory.CreateText(panel, "PRESTIGE - START THE NEXT LEAGUE", UIFactory.SubheadingSize, UIFactory.GoldColor,
+            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.84f), new Vector2(0.96f, 0.96f), FontStyle.Bold);
+
+        UIFactory.CreateText(panel, "KEEP:  Level, XP, Archetype, Stats, Moves, Achievements,\nHall of Champions, Lifetime Statistics, Prestige Level",
+            UIFactory.CaptionSize, UIFactory.PositiveColor, TextAnchor.MiddleCenter, new Vector2(0.06f, 0.56f), new Vector2(0.94f, 0.8f));
+
+        UIFactory.CreateText(panel, "RESET:  Gym Progress, Defeated Opponents, Championship Progress,\nRival Progress, Mirror Match Progress, Current Run Progress",
+            UIFactory.CaptionSize, UIFactory.DangerColor, TextAnchor.MiddleCenter, new Vector2(0.06f, 0.32f), new Vector2(0.94f, 0.56f));
+
+        UIFactory.CreateButton(panel, "CONFIRM", new Vector2(0.1f, 0.06f), new Vector2(0.46f, 0.22f),
+            () => { GM.PerformPrestige(); HidePrestigeConfirm(); Refresh(); }, UIFactory.DangerColor);
+        UIFactory.CreateButton(panel, "CANCEL", new Vector2(0.54f, 0.06f), new Vector2(0.9f, 0.22f),
+            () => HidePrestigeConfirm(), UIFactory.SecondaryColor, isBackAction: true);
+
+        panel.gameObject.SetActive(false);
+        return panel;
+    }
+
+    void ShowPrestigeConfirm()
+    {
+        if (!GM.CanPrestige) return;
+        prestigeConfirmPanel.gameObject.SetActive(true);
+        prestigeConfirmPanel.SetAsLastSibling();
+    }
+
+    void HidePrestigeConfirm() => prestigeConfirmPanel.gameObject.SetActive(false);
 
     public void Refresh()
     {
@@ -79,9 +125,16 @@ public class ProfileScreen : UIScreen
         Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
         UIFactory.SetFighterPortrait(portraitImage, "player", GM.Player.Archetype, theme);
         UIFactory.AddDisciplineBadge(portraitFrame, GM.Player.Archetype, theme);
+        // Milestone 46, Part 4: large character display - Profile Screen.
+        UIFactory.ApplyPrestigeTattoo(portraitImage, GM.PrestigeLevel);
 
         bool isChampion = GM.HasBecomeChampion();
         SetChampionBadge(isChampion);
+
+        // Milestone 45, Part 3: only enabled (and only opens the confirm
+        // panel) once Mirror Match is actually defeated.
+        prestigeButton.interactable = GM.CanPrestige;
+        HidePrestigeConfirm();
 
         int unlockedAchievements = 0;
         foreach (var a in AchievementDatabase.All) if (GM.IsAchievementUnlocked(a.Id)) unlockedAchievements++;
@@ -99,7 +152,14 @@ public class ProfileScreen : UIScreen
         // archetype, motto) plus the Rival Tracker status and narrative record -
         // all read from RivalDatabase/GameManager, no new save state.
         string rivalArchetypeName = ArchetypeDatabase.GetByType(RivalDatabase.PortraitArchetype)?.DisplayName ?? "Fighter";
-        statusText.text = $"{(isChampion ? "CHAMPION" : "Not yet champion")}\n" +
+        // Milestone 45, Part 6: Prestige status shown alongside the existing
+        // champion/rival summary - one consistent format (PrestigeSystem.FormatLevel)
+        // plus the lightweight flavor label from Part 10, only when above 0.
+        string prestigeLabel = PrestigeSystem.FormatLevel(GM.PrestigeLevel);
+        string prestigeFlavor = PrestigeSystem.GetStatusLabel(GM.PrestigeLevel);
+        string prestigeLine = string.IsNullOrEmpty(prestigeFlavor) ? prestigeLabel : $"{prestigeLabel}  -  {prestigeFlavor}";
+
+        statusText.text = $"{(isChampion ? "CHAMPION" : "Not yet champion")}   -   {prestigeLine}\n" +
             $"RIVAL: {RivalDatabase.RivalName} ({rivalArchetypeName}) - {RivalDatabase.GetRivalStatus(GM)}\n" +
             $"Record: {RivalDatabase.GetRivalRecord(GM)}   -   \"{RivalDatabase.Motto}\"";
     }

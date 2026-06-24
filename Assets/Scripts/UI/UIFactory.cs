@@ -898,6 +898,65 @@ public static class UIFactory
         iconImage.preserveAspect = true;
     }
 
+    // Milestone 46, Part 3: a Prestige tattoo overlay - a small gold-ringed
+    // badge rendered as a sibling immediately after the given fighter Image,
+    // never modifying that Image itself. Computed relative to the fighter
+    // Image's OWN anchor rect (not its parent's), so this works whether the
+    // portrait has its own dedicated frame (Profile, Victory/Defeat's
+    // CreateBattleFighter root) or shares a parent with other elements
+    // (Tale of the Tape's identity strip, where the player and opponent
+    // portraits are siblings under the same container) - and works for any
+    // archetype/fighterId since it's keyed purely on Prestige level.
+    // Bottom-left corner, deliberately opposite AddDisciplineBadge's
+    // bottom-right placement, so the two never overlap.
+    public static void ApplyPrestigeTattoo(Image fighterImage, int prestigeLevel)
+    {
+        if (fighterImage == null) return;
+        var parent = fighterImage.transform.parent;
+        if (parent == null) return;
+
+        string badgeName = "PrestigeTattoo_" + fighterImage.gameObject.name;
+        var existing = parent.Find(badgeName);
+        if (existing != null) Object.Destroy(existing.gameObject);
+
+        var sprite = ArtRegistry.GetPrestigeTattoo(prestigeLevel);
+        if (sprite == null) return;
+
+        Vector2 portraitMin = fighterImage.rectTransform.anchorMin;
+        Vector2 portraitMax = fighterImage.rectTransform.anchorMax;
+        Vector2 size = portraitMax - portraitMin;
+
+        // Deliberately not run through SanitizeName here - it truncates to
+        // 24 chars, which would desync the GameObject's actual name from the
+        // unsanitized badgeName this method searches for on the next call
+        // (every fighter sprite in this codebase is named "FighterSprite",
+        // so "PrestigeTattoo_FighterSprite" alone is already 29 characters).
+        var badgeGo = new GameObject(badgeName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        badgeGo.transform.SetParent(parent, false);
+        badgeGo.transform.SetSiblingIndex(fighterImage.transform.GetSiblingIndex() + 1);
+        var rt = badgeGo.GetComponent<RectTransform>();
+        rt.anchorMin = portraitMin;
+        rt.anchorMax = portraitMin + size * 0.3f;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var ring = badgeGo.GetComponent<Image>();
+        ring.sprite = CircleSprite;
+        ring.color = GoldColor;
+        ring.raycastTarget = false;
+
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconGo.transform.SetParent(badgeGo.transform, false);
+        var iconRt = iconGo.GetComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0.14f, 0.14f);
+        iconRt.anchorMax = new Vector2(0.86f, 0.86f);
+        iconRt.offsetMin = Vector2.zero;
+        iconRt.offsetMax = Vector2.zero;
+        var iconImage = iconGo.GetComponent<Image>();
+        iconImage.sprite = sprite;
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+    }
+
     // A more ornate medal for championship-tier moments (Championship screen, Hall
     // of Champions) - distinct from the standard league badge used elsewhere.
     public static RectTransform CreateChampionBadge(Transform parent, Vector2 anchorMin, Vector2 anchorMax)

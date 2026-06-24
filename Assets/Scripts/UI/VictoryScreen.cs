@@ -93,6 +93,8 @@ public class VictoryScreen : UIScreen
         Color theme = IconFactory.GetArchetypeThemeColor(GM.Player.Archetype);
         winnerVisual.Initialize(winnerSprite, "player", GM.Player.Archetype, theme, faceRight: true);
         winnerVisual.PlayVictoryPose(champion: GM.HasBecomeChampion(), leader: false);
+        // Milestone 46, Part 4: large character display - Victory Screen.
+        UIFactory.ApplyPrestigeTattoo(winnerSprite, GM.PrestigeLevel);
 
         RunAnimation(RewardRevealRoutine(moveUnlocked, gymCleared, shadowVictory, rivalVictory, GM.TotalWins));
     }
@@ -112,6 +114,11 @@ public class VictoryScreen : UIScreen
 
         yield return new WaitForSecondsRealtime(0.24f);
         AppendRewardLine($"Level {GM.Player.Stats.Level}");
+
+        // Milestone 45, Part 6: shown on every victory, not just Prestige-
+        // related ones - consistent display wherever Prestige appears.
+        yield return new WaitForSecondsRealtime(0.18f);
+        AppendRewardLine(PrestigeSystem.FormatLevel(GM.PrestigeLevel));
         // Milestone 35, Part 5: GM.LastVictoryLeveledUpTo (added in Milestone
         // 34) is exactly "0 unless this fight's XP just crossed a level
         // boundary" - the right signal for a one-time level-up cue, since this
