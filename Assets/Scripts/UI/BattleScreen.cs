@@ -19,6 +19,7 @@ public class BattleScreen : UIScreen
     readonly Text playerEffectsText;
     readonly Text opponentEffectsText;
     readonly Text logText;
+    readonly ScrollRect logScroll;
     readonly Text chainText;
     readonly RectTransform stageCard;
     readonly CanvasGroup stageGroup;
@@ -34,7 +35,18 @@ public class BattleScreen : UIScreen
     readonly Slider opponentHealth;
     readonly Slider opponentStamina;
     readonly Button[] moveButtons;
-    readonly Text[] moveLabels;
+    // Milestone 64, Part 5/6: was one auto-fit Text per button (name+cost+tag
+    // all crammed onto 2 lines at one uniform size, in UiFont/Abolition-Rough -
+    // a condensed display face suited to short hype headlines, not dense
+    // multi-line button content). Split into 3 explicitly-tiered Texts so
+    // size hierarchy is guaranteed (not just "whatever best-fit lands on"),
+    // and built via BodySize/CaptionSize so they resolve to DialogueFont
+    // (AtkinsonHyperlegible-Bold) through UIFactory's existing font-by-size
+    // lookup - already in the project, already the most legible-at-small-
+    // sizes option of the three, no new font introduced.
+    readonly Text[] moveNameTexts;
+    readonly Text[] moveCostTexts;
+    readonly Text[] moveTagTexts;
     readonly Button itemButton;
     readonly Button recoverButton;
     readonly Button parryButton;
@@ -48,8 +60,18 @@ public class BattleScreen : UIScreen
     readonly RectTransform introMatchupGroup;
     readonly Image introPlayerPortrait;
     readonly Image introOpponentPortrait;
-    readonly Text introPlayerName;
-    readonly Text introOpponentName;
+    // Milestone 64, Part 2/5: the old single 5-line introPlayerName/
+    // introOpponentName block is split into 3 tiered elements per side -
+    // Name (largest), Nickname, and Details (archetype/level/Prestige +
+    // record/streak + age/reach/style, all "supporting information" per
+    // Part 5's own tier list) - same data as before, just visually tiered
+    // instead of one undifferentiated block.
+    readonly Text introPlayerNameText;
+    readonly Text introPlayerNicknameText;
+    readonly Text introPlayerDetailsText;
+    readonly Text introOpponentNameText;
+    readonly Text introOpponentNicknameText;
+    readonly Text introOpponentDetailsText;
     readonly RectTransform introTapeGroup;
     readonly Text[] tapePlayerValues = new Text[8];
     readonly Text[] tapeOpponentValues = new Text[8];
@@ -140,31 +162,53 @@ public class BattleScreen : UIScreen
         // full width, with each fighter's name/portrait/bars sitting directly
         // beneath their own side and the battle log filling the center column -
         // the layout the brief asks for, using 16:9 width instead of stacking.
+        // Milestone 64, Part 3: card height grown 0.14 -> 0.163 (0.155-0.318,
+        // was 0.155-0.295) to match the enlarged log panel's new height
+        // exactly - the three center-row elements (player card / log /
+        // opponent card) now share the same top and bottom edges instead of
+        // the cards looking short next to a taller log.
         var opponentCard = UIFactory.CreateFighterCard(Root.transform, "Opponent",
-            new Vector2(0.66f, 0.155f), new Vector2(0.98f, 0.295f), out opponentPortrait, out var opponentInfo);
+            new Vector2(0.66f, 0.155f), new Vector2(0.98f, 0.318f), out opponentPortrait, out var opponentInfo);
         opponentFx = AttachFx(opponentCard);
 
+        // Milestone 64, Part 3/10: best-fit added so a long name+nickname+level
+        // string shrinks to fit on one line instead of wrapping and overflowing
+        // into the stat rows below (the "long names/nicknames clipping" bug -
+        // this Text previously had no overflow safety at all).
         opponentName = UIFactory.CreateText(opponentInfo, "", UIFactory.SubheadingSize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
             new Vector2(0f, 0.62f), new Vector2(1f, 1f), FontStyle.Bold);
+        opponentName.resizeTextForBestFit = true;
+        opponentName.resizeTextMinSize = 14;
+        opponentName.resizeTextMaxSize = UIFactory.SubheadingSize;
         BuildStatRow(opponentInfo, new Vector2(0f, 0.34f), new Vector2(1f, 0.6f), "HP", HealthColor, out opponentHealth, out opponentHealthValue);
         BuildStatRow(opponentInfo, new Vector2(0f, 0.06f), new Vector2(1f, 0.32f), "STM", StaminaColor, out opponentStamina, out opponentStaminaValue);
 
-        opponentEffectsText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.66f, 0.135f), new Vector2(0.98f, 0.153f));
+        // Milestone 64, Part 9/10: moved into the 0.70-0.82 gap between
+        // recoverButton and clinchButton - the old 0.66-0.98 box overlapped
+        // both recoverButton and clinchButton whenever an effect was active
+        // (same Y band as the button row below).
+        opponentEffectsText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.70f, 0.135f), new Vector2(0.82f, 0.153f));
         opponentEffectsText.color = UIFactory.GoldColor;
 
         var playerCard = UIFactory.CreateFighterCard(Root.transform, "Player",
-            new Vector2(0.02f, 0.155f), new Vector2(0.34f, 0.295f), out playerPortrait, out var playerInfo);
+            new Vector2(0.02f, 0.155f), new Vector2(0.34f, 0.318f), out playerPortrait, out var playerInfo);
         playerFx = AttachFx(playerCard);
 
         playerName = UIFactory.CreateText(playerInfo, "", UIFactory.SubheadingSize, UIFactory.CreamColor, TextAnchor.MiddleLeft,
             new Vector2(0f, 0.62f), new Vector2(1f, 1f), FontStyle.Bold);
+        playerName.resizeTextForBestFit = true;
+        playerName.resizeTextMinSize = 14;
+        playerName.resizeTextMaxSize = UIFactory.SubheadingSize;
         // Milestone 50, Part 8: unified to the same HealthColor the opponent's
         // bar already uses (was a separate ad-hoc green) - one fighter's HP
         // bar shouldn't be a different hue than the other's for the same stat.
         BuildStatRow(playerInfo, new Vector2(0f, 0.34f), new Vector2(1f, 0.6f), "HP", HealthColor, out playerHealth, out playerHealthValue);
         BuildStatRow(playerInfo, new Vector2(0f, 0.06f), new Vector2(1f, 0.32f), "STM", StaminaColor, out playerStamina, out playerStaminaValue);
 
-        playerEffectsText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.02f, 0.135f), new Vector2(0.34f, 0.153f));
+        // Milestone 64, Part 9/10: moved into the 0.18-0.30 gap between
+        // parryButton and itemButton - the old 0.02-0.34 box overlapped both
+        // whenever an effect was active.
+        playerEffectsText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.18f, 0.135f), new Vector2(0.30f, 0.153f));
         playerEffectsText.color = UIFactory.GoldColor;
 
         stageCard = UIFactory.CreateCard(Root.transform, "FightStage", new Vector2(0.02f, 0.32f), new Vector2(0.98f, 0.94f),
@@ -183,34 +227,75 @@ public class BattleScreen : UIScreen
         opponentAura.color = new Color(UIFactory.GoldColor.r, UIFactory.GoldColor.g, UIFactory.GoldColor.b, 0.22f);
         opponentAura.raycastTarget = false;
 
+        // Milestone 64, Part 8: matches the enlarged baseline box Refresh()
+        // applies every fight (see the championshipFight ternary below) -
+        // this initial value only matters for the brief instant before the
+        // first Refresh() runs.
         playerCombatantRoot = UIFactory.CreateBattleFighter(stageCard, "Player",
-            new Vector2(0.04f, 0.03f), new Vector2(0.48f, 0.98f), out playerBattleSprite);
+            new Vector2(0.02f, 0.01f), new Vector2(0.48f, 0.99f), out playerBattleSprite);
         opponentCombatantRoot = UIFactory.CreateBattleFighter(stageCard, "Opponent",
-            new Vector2(0.52f, 0.03f), new Vector2(0.96f, 0.98f), out opponentBattleSprite);
+            new Vector2(0.52f, 0.01f), new Vector2(0.98f, 0.99f), out opponentBattleSprite);
         playerCombatant = playerCombatantRoot.gameObject.AddComponent<BattleFighterVisual>();
         opponentCombatant = opponentCombatantRoot.gameObject.AddComponent<BattleFighterVisual>();
 
         UIFactory.CreateText(stageCard, "VS", UIFactory.SubheadingSize, UIFactory.GoldColor, TextAnchor.MiddleCenter,
             new Vector2(0.45f, 0.5f), new Vector2(0.55f, 0.72f), FontStyle.Bold);
 
-        // Battle log now lives in the center column, at the same height band as
-        // each fighter's name/bars on either side of it. Milestone 31, Part 5:
-        // shrunk slightly from the top to make room for the small "current
-        // chain" readout just above it, without touching anything else's layout.
-        UIFactory.CreateCard(Root.transform, "LogBackdrop", new Vector2(0.36f, 0.155f), new Vector2(0.64f, 0.275f),
+        // Milestone 64, Part 2: the log panel now spans the full old log+chain
+        // band (was two separate elements, 0.155-0.275 and 0.277-0.295, with a
+        // small gap between) as one taller, slightly wider card - chainText
+        // becomes its header row instead of a separate floating caption, and
+        // the scrollable text area below it gets real padding instead of a
+        // ~1% margin. Height: 0.163 (was 0.12, +36%). Width: 0.31 (was 0.28).
+        var logCard = UIFactory.CreateCard(Root.transform, "LogBackdrop", new Vector2(0.345f, 0.155f), new Vector2(0.655f, 0.318f),
             new Color(UIFactory.BackgroundColor.r, UIFactory.BackgroundColor.g, UIFactory.BackgroundColor.b, 0.88f));
-        // Milestone 28: bumped from CaptionSize - on a typical 16:9 laptop display
-        // the canvas scale factor lands well under 1.0, so the log was reading
-        // smaller than intended for the most important screen in the game.
-        logText = UIFactory.CreateText(Root.transform, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
-            new Vector2(0.37f, 0.16f), new Vector2(0.63f, 0.265f));
 
         // Milestone 31, Part 5: a small, unobtrusive readout of the player's
         // in-progress move chain (e.g. "Jab -> Jab"), so combos can be found
-        // by noticing the pattern rather than only by reading a wiki.
-        chainText = UIFactory.CreateCaption(Root.transform, "", new Vector2(0.36f, 0.277f), new Vector2(0.64f, 0.295f), TextAnchor.MiddleCenter);
+        // by noticing the pattern rather than only by reading a wiki. Now the
+        // log card's own header row instead of a separate element above it.
+        chainText = UIFactory.CreateCaption(logCard, "", new Vector2(0.04f, 0.84f), new Vector2(0.96f, 0.98f), TextAnchor.MiddleCenter);
         chainText.color = UIFactory.MutedTextColor;
         chainText.fontStyle = FontStyle.Italic;
+
+        // Milestone 64, Part 2: a real scroll view - was a fixed Text that
+        // silently dropped everything past the last 4 lines. Viewport clips
+        // to the padded inner area (4% side margins, 3% bottom), Content
+        // (logText itself) grows downward via ContentSizeFitter as lines are
+        // added, and AppendLog snaps verticalNormalizedPosition to 0 (bottom)
+        // on every update so the newest line is always the one in view.
+        var logViewportGo = new GameObject("LogViewport", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(RectMask2D));
+        logViewportGo.transform.SetParent(logCard, false);
+        var logViewportRt = (RectTransform)logViewportGo.transform;
+        logViewportRt.anchorMin = new Vector2(0.04f, 0.03f);
+        logViewportRt.anchorMax = new Vector2(0.96f, 0.80f);
+        logViewportRt.offsetMin = Vector2.zero;
+        logViewportRt.offsetMax = Vector2.zero;
+        var logViewportImage = logViewportGo.GetComponent<Image>();
+        logViewportImage.color = new Color(0f, 0f, 0f, 0.001f);
+
+        // Milestone 28: bumped from CaptionSize - on a typical 16:9 laptop display
+        // the canvas scale factor lands well under 1.0, so the log was reading
+        // smaller than intended for the most important screen in the game.
+        logText = UIFactory.CreateText(logViewportRt, "", UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.UpperLeft,
+            Vector2.zero, Vector2.one);
+        var logTextRt = logText.rectTransform;
+        logTextRt.anchorMin = new Vector2(0f, 1f);
+        logTextRt.anchorMax = new Vector2(1f, 1f);
+        logTextRt.pivot = new Vector2(0.5f, 1f);
+        logTextRt.offsetMin = new Vector2(logTextRt.offsetMin.x, logTextRt.offsetMin.y);
+        logTextRt.sizeDelta = new Vector2(0f, 0f);
+        logTextRt.anchoredPosition = Vector2.zero;
+        var logFitter = logText.gameObject.AddComponent<ContentSizeFitter>();
+        logFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        logScroll = logCard.gameObject.AddComponent<ScrollRect>();
+        logScroll.viewport = logViewportRt;
+        logScroll.content = logTextRt;
+        logScroll.horizontal = false;
+        logScroll.vertical = true;
+        logScroll.movementType = ScrollRect.MovementType.Clamped;
+        logScroll.scrollSensitivity = 18f;
 
         itemButton = UIFactory.CreateButton(Root.transform, "ITEMS", new Vector2(0.30f, 0.115f), new Vector2(0.46f, 0.148f),
             () => ToggleItemPanel(), UIFactory.SecondaryColor);
@@ -218,11 +303,15 @@ public class BattleScreen : UIScreen
         // Milestone 30, Part 5: Recover spends the player's turn for a much
         // bigger stamina gain than passive regen alone - the counterweight to
         // the lowered regen rate below.
-        // Milestone 50, Part 5/6: was PositiveColor (green) - Recover is an
-        // action the player takes, not a stat comparison/reward/better
-        // value, so per the unified palette's rules it belongs on Orange.
+        // Milestone 64, Part 7: was AccentOrange (flat) - orange across 5 of
+        // the 9 action-row buttons (Recover + 4 moves) at once is what made
+        // the row read as "orange-dominated". Now the same dark neutral body
+        // as Items/Parry/Clinch, with orange reserved for hover/selected via
+        // ApplyActionHoverTint below - gold stays the untouched premium
+        // accent elsewhere (HUD labels, VS, etc), not a button body color.
         recoverButton = UIFactory.CreateButton(Root.transform, "RECOVER", new Vector2(0.54f, 0.115f), new Vector2(0.70f, 0.148f),
-            () => OnRecoverSelected(), UIFactory.AccentOrange);
+            () => OnRecoverSelected(), UIFactory.SecondaryColor);
+        ApplyActionHoverTint(recoverButton);
 
         // Milestone 40, Part 1: PARRY/CLINCH - two universal defensive actions
         // sitting in the side margins of the same button row (0.02-0.30 and
@@ -235,20 +324,44 @@ public class BattleScreen : UIScreen
         itemContainer = UIFactory.CreateContainer(Root.transform, new Vector2(0.02f, 0.02f), new Vector2(0.98f, 0.105f));
         itemContainer.gameObject.SetActive(false);
 
-        // Move buttons in a single row across the bottom (4 across) instead of a
-        // 2x2 grid - 16:9 width comfortably fits all four side by side.
+        // Milestone 64, Part 5/7: move buttons rebuilt on CreateCardButton (the
+        // same interactive shell - hover/press tint, ButtonPunch, click sound -
+        // but without the single auto-fit Text) so Name/Cost/Tag can be 3
+        // separately-sized children instead of one blob. Dark neutral body to
+        // match Recover/Items/Parry/Clinch; small internal padding (6% each
+        // side) on every tier instead of text running edge to edge.
         moveButtons = new Button[4];
-        moveLabels = new Text[4];
+        moveNameTexts = new Text[4];
+        moveCostTexts = new Text[4];
+        moveTagTexts = new Text[4];
         for (int i = 0; i < 4; i++)
         {
             int index = i;
             float xMin = 0.02f + i * 0.245f;
             float xMax = xMin + 0.225f;
 
-            var btn = UIFactory.CreateButton(Root.transform, "Move", new Vector2(xMin, 0.02f), new Vector2(xMax, 0.105f),
-                () => OnMoveSelected(index));
+            var btn = UIFactory.CreateCardButton(Root.transform, "Move" + i, new Vector2(xMin, 0.02f), new Vector2(xMax, 0.105f),
+                () => OnMoveSelected(index), UIFactory.SecondaryColor);
+            ApplyActionHoverTint(btn);
             moveButtons[i] = btn;
-            moveLabels[i] = btn.GetComponentInChildren<Text>();
+
+            moveNameTexts[i] = UIFactory.CreateText(btn.transform, "", UIFactory.BodySize, UIFactory.CreamColor,
+                TextAnchor.MiddleCenter, new Vector2(0.06f, 0.56f), new Vector2(0.94f, 0.92f), FontStyle.Bold);
+            moveNameTexts[i].resizeTextForBestFit = true;
+            moveNameTexts[i].resizeTextMinSize = 16;
+            moveNameTexts[i].resizeTextMaxSize = UIFactory.BodySize;
+
+            moveCostTexts[i] = UIFactory.CreateText(btn.transform, "", UIFactory.CaptionSize, UIFactory.GoldColor,
+                TextAnchor.MiddleCenter, new Vector2(0.06f, 0.30f), new Vector2(0.94f, 0.54f));
+            moveCostTexts[i].resizeTextForBestFit = true;
+            moveCostTexts[i].resizeTextMinSize = 11;
+            moveCostTexts[i].resizeTextMaxSize = 15;
+
+            moveTagTexts[i] = UIFactory.CreateText(btn.transform, "", UIFactory.CaptionSize, UIFactory.MutedTextColor,
+                TextAnchor.MiddleCenter, new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.28f), FontStyle.Italic);
+            moveTagTexts[i].resizeTextForBestFit = true;
+            moveTagTexts[i].resizeTextMinSize = 8;
+            moveTagTexts[i].resizeTextMaxSize = 11;
         }
 
         introCard = UIFactory.CreateCard(Root.transform, "FightIntroduction",
@@ -263,25 +376,28 @@ public class BattleScreen : UIScreen
         skipButton.targetGraphic = introCard.GetComponent<Image>();
         skipButton.onClick.AddListener(SkipIntro);
 
+        // Milestone 64, Part 6: header tightened into one cohesive title
+        // block (was y 0.79-0.97, height 0.18) - freed height goes toward
+        // the enlarged fighter cards below.
         introBillingText = UIFactory.CreateText(introCard, "", UIFactory.SubheadingSize, UIFactory.GoldColor,
-            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.86f), new Vector2(0.96f, 0.97f), FontStyle.Bold);
+            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.895f), new Vector2(0.96f, 0.97f), FontStyle.Bold);
         introBillingText.raycastTarget = false;
         introAnnouncementText = UIFactory.CreateText(introCard, "", UIFactory.CaptionSize, UIFactory.MutedTextColor,
-            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.79f), new Vector2(0.96f, 0.86f));
+            TextAnchor.MiddleCenter, new Vector2(0.04f, 0.84f), new Vector2(0.96f, 0.895f));
         introAnnouncementText.raycastTarget = false;
 
-        // Milestone 36, Part 1: the face-off identity strip (portraits, name,
-        // nickname, archetype, level, record, win streak, flavor stats) now
-        // stays on screen alongside the stat table below it instead of being
-        // swapped out for it - together they form one continuous Tale of the
-        // Tape stage rather than two separate beats.
-        introMatchupGroup = UIFactory.CreateContainer(introCard, new Vector2(0f, 0.555f), new Vector2(1f, 0.79f));
+        // Milestone 64, Part 1/2/4: the three-column face-off - LEFT (player
+        // sprite + tiered identity), CENTER (VS), RIGHT (opponent sprite +
+        // tiered identity). Was y 0.555-0.79 (height 0.235); now 0.40-0.82
+        // (height 0.42, ~79% taller) so both the sprite and identity block
+        // below it can grow proportionally (Part 2/4's "noticeably larger").
+        introMatchupGroup = UIFactory.CreateContainer(introCard, new Vector2(0f, 0.40f), new Vector2(1f, 0.82f));
 
         var playerPortraitGo = new GameObject("IntroPlayerPortrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         playerPortraitGo.transform.SetParent(introMatchupGroup, false);
         var playerPortraitRt = playerPortraitGo.GetComponent<RectTransform>();
-        playerPortraitRt.anchorMin = new Vector2(0.05f, 0.3f);
-        playerPortraitRt.anchorMax = new Vector2(0.3f, 1f);
+        playerPortraitRt.anchorMin = new Vector2(0.02f, 0.30f);
+        playerPortraitRt.anchorMax = new Vector2(0.34f, 1f);
         playerPortraitRt.offsetMin = Vector2.zero;
         playerPortraitRt.offsetMax = Vector2.zero;
         introPlayerPortrait = playerPortraitGo.GetComponent<Image>();
@@ -291,57 +407,96 @@ public class BattleScreen : UIScreen
         var opponentPortraitGo = new GameObject("IntroOpponentPortrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         opponentPortraitGo.transform.SetParent(introMatchupGroup, false);
         var opponentPortraitRt = opponentPortraitGo.GetComponent<RectTransform>();
-        opponentPortraitRt.anchorMin = new Vector2(0.7f, 0.3f);
-        opponentPortraitRt.anchorMax = new Vector2(0.95f, 1f);
+        opponentPortraitRt.anchorMin = new Vector2(0.66f, 0.30f);
+        opponentPortraitRt.anchorMax = new Vector2(0.98f, 1f);
         opponentPortraitRt.offsetMin = Vector2.zero;
         opponentPortraitRt.offsetMax = Vector2.zero;
         introOpponentPortrait = opponentPortraitGo.GetComponent<Image>();
         introOpponentPortrait.preserveAspect = true;
         introOpponentPortrait.raycastTarget = false;
 
-        // Milestone 36, Part 2/3/5: reused for a multi-line identity block
-        // (name+nickname / archetype+level / record+streak / flavor stats)
-        // instead of just a single name line - best-fit sized so four lines
-        // of broadcast flavor never clip inside the compact column below
-        // each portrait.
-        introPlayerName = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.CreamColor,
-            TextAnchor.UpperCenter, new Vector2(0.0f, 0.0f), new Vector2(0.34f, 0.3f), FontStyle.Bold);
-        introPlayerName.raycastTarget = false;
-        introPlayerName.resizeTextForBestFit = true;
-        introPlayerName.resizeTextMinSize = 10;
-        introPlayerName.resizeTextMaxSize = UIFactory.CaptionSize;
-        introOpponentName = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.CreamColor,
-            TextAnchor.UpperCenter, new Vector2(0.66f, 0.0f), new Vector2(1f, 0.3f), FontStyle.Bold);
-        introOpponentName.raycastTarget = false;
-        introOpponentName.resizeTextForBestFit = true;
-        introOpponentName.resizeTextMinSize = 10;
-        introOpponentName.resizeTextMaxSize = UIFactory.CaptionSize;
+        // Milestone 64, Part 2/5: split into 3 tiers (Name / Nickname /
+        // Details) instead of one undifferentiated 5-line block - same data,
+        // real typographic hierarchy. Name uses BodySize (a clear step up
+        // from the old CaptionSize-for-everything), Nickname sits between
+        // the two, Details (archetype/level/Prestige + record/streak +
+        // age/reach/style) is the smallest "supporting information" tier.
+        introPlayerNameText = UIFactory.CreateText(introMatchupGroup, "", UIFactory.BodySize, UIFactory.CreamColor,
+            TextAnchor.MiddleCenter, new Vector2(0.0f, 0.20f), new Vector2(0.36f, 0.30f), FontStyle.Bold);
+        introPlayerNameText.raycastTarget = false;
+        introPlayerNameText.resizeTextForBestFit = true;
+        introPlayerNameText.resizeTextMinSize = 14;
+        introPlayerNameText.resizeTextMaxSize = UIFactory.BodySize;
 
+        introPlayerNicknameText = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.GoldColor,
+            TextAnchor.MiddleCenter, new Vector2(0.0f, 0.12f), new Vector2(0.36f, 0.20f), FontStyle.Italic);
+        introPlayerNicknameText.raycastTarget = false;
+        introPlayerNicknameText.resizeTextForBestFit = true;
+        introPlayerNicknameText.resizeTextMinSize = 11;
+        introPlayerNicknameText.resizeTextMaxSize = UIFactory.CaptionSize;
+
+        introPlayerDetailsText = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.MutedTextColor,
+            TextAnchor.UpperCenter, new Vector2(0.0f, 0.0f), new Vector2(0.36f, 0.12f));
+        introPlayerDetailsText.raycastTarget = false;
+        introPlayerDetailsText.resizeTextForBestFit = true;
+        introPlayerDetailsText.resizeTextMinSize = 9;
+        introPlayerDetailsText.resizeTextMaxSize = UIFactory.CaptionSize;
+
+        introOpponentNameText = UIFactory.CreateText(introMatchupGroup, "", UIFactory.BodySize, UIFactory.CreamColor,
+            TextAnchor.MiddleCenter, new Vector2(0.64f, 0.20f), new Vector2(1f, 0.30f), FontStyle.Bold);
+        introOpponentNameText.raycastTarget = false;
+        introOpponentNameText.resizeTextForBestFit = true;
+        introOpponentNameText.resizeTextMinSize = 14;
+        introOpponentNameText.resizeTextMaxSize = UIFactory.BodySize;
+
+        introOpponentNicknameText = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.GoldColor,
+            TextAnchor.MiddleCenter, new Vector2(0.64f, 0.12f), new Vector2(1f, 0.20f), FontStyle.Italic);
+        introOpponentNicknameText.raycastTarget = false;
+        introOpponentNicknameText.resizeTextForBestFit = true;
+        introOpponentNicknameText.resizeTextMinSize = 11;
+        introOpponentNicknameText.resizeTextMaxSize = UIFactory.CaptionSize;
+
+        introOpponentDetailsText = UIFactory.CreateText(introMatchupGroup, "", UIFactory.CaptionSize, UIFactory.MutedTextColor,
+            TextAnchor.UpperCenter, new Vector2(0.64f, 0.0f), new Vector2(1f, 0.12f));
+        introOpponentDetailsText.raycastTarget = false;
+        introOpponentDetailsText.resizeTextForBestFit = true;
+        introOpponentDetailsText.resizeTextMinSize = 9;
+        introOpponentDetailsText.resizeTextMaxSize = UIFactory.CaptionSize;
+
+        // Milestone 64, Part 7: anchored in the gap between the two sprite
+        // columns, vertically centered on the sprite zone instead of
+        // floating - feels like it belongs between the two cards.
         var introVsText = UIFactory.CreateText(introMatchupGroup, "VS", UIFactory.SubheadingSize, UIFactory.GoldColor,
-            TextAnchor.MiddleCenter, new Vector2(0.4f, 0.42f), new Vector2(0.6f, 0.78f), FontStyle.Bold);
+            TextAnchor.MiddleCenter, new Vector2(0.42f, 0.55f), new Vector2(0.58f, 0.80f), FontStyle.Bold);
         introVsText.raycastTarget = false;
 
-        // Milestone 36, Part 4: now exactly the brief's 8 combat stats (HP,
-        // Stamina, Strength, Defense, Speed, Striking, Grappling, Submission),
-        // color-coded per row in SetTapeRow. Sits below the identity strip
-        // above rather than replacing it.
-        introTapeGroup = UIFactory.CreateContainer(introCard, new Vector2(0.08f, 0.135f), new Vector2(0.92f, 0.535f));
+        // Milestone 64, Part 3: now y 0.12-0.38 (was 0.135-0.535) - shorter
+        // overall, since the fix here is horizontal (values right next to
+        // labels, see SetTapeRow's TextAnchor change below), not vertical.
+        introTapeGroup = UIFactory.CreateContainer(introCard, new Vector2(0.08f, 0.12f), new Vector2(0.92f, 0.38f));
         for (int i = 0; i < TapeOfTheTapeLabels.Length; i++)
         {
             float slot = 1f / TapeOfTheTapeLabels.Length;
             float yMax = 1f - i * slot - slot * 0.07f;
             float yMin = yMax - slot * 0.86f;
 
+            // Milestone 64, Part 3: anchor flipped from MiddleLeft to
+            // MiddleRight - the value now sits at the box's right edge,
+            // directly against the label's left edge, instead of at the
+            // box's far-left (screen edge), which is what created the
+            // "numbers far from labels" gap the brief called out.
             tapePlayerValues[i] = UIFactory.CreateText(introTapeGroup, "", UIFactory.BodySize, UIFactory.CreamColor,
-                TextAnchor.MiddleLeft, new Vector2(0f, yMin), new Vector2(0.32f, yMax), FontStyle.Bold);
+                TextAnchor.MiddleRight, new Vector2(0f, yMin), new Vector2(0.32f, yMax), FontStyle.Bold);
             tapePlayerValues[i].raycastTarget = false;
 
             var tapeLabel = UIFactory.CreateText(introTapeGroup, TapeOfTheTapeLabels[i], UIFactory.CaptionSize, UIFactory.GoldColor,
                 TextAnchor.MiddleCenter, new Vector2(0.32f, yMin), new Vector2(0.68f, yMax), FontStyle.Bold);
             tapeLabel.raycastTarget = false;
 
+            // Same flip, mirrored: MiddleRight -> MiddleLeft, so this value
+            // sits directly against the label's right edge.
             tapeOpponentValues[i] = UIFactory.CreateText(introTapeGroup, "", UIFactory.BodySize, UIFactory.CreamColor,
-                TextAnchor.MiddleRight, new Vector2(0.68f, yMin), new Vector2(1f, yMax), FontStyle.Bold);
+                TextAnchor.MiddleLeft, new Vector2(0.68f, yMin), new Vector2(1f, yMax), FontStyle.Bold);
             tapeOpponentValues[i].raycastTarget = false;
         }
         introTapeGroup.gameObject.SetActive(false);
@@ -382,6 +537,29 @@ public class BattleScreen : UIScreen
         }
     }
 
+    // Milestone 64, Part 7: orange is reserved for hover/selected instead of
+    // being the button's resting body color. Selectable's color tinting
+    // multiplies the target Graphic's already-assigned color by the
+    // ColorBlock entry for the current state (normalColor=white is already
+    // a no-op 1x multiplier on every existing button), so dividing
+    // AccentOrange by the button's dark neutral base gives the exact per-
+    // channel multiplier that turns it orange on hover/selected without
+    // touching CreateButton/CreateCardButton's shared defaults used by every
+    // other screen in the game.
+    static void ApplyActionHoverTint(Button btn)
+    {
+        Color baseColor = btn.targetGraphic.color;
+        Color tint = new Color(
+            UIFactory.AccentOrange.r / Mathf.Max(baseColor.r, 0.02f),
+            UIFactory.AccentOrange.g / Mathf.Max(baseColor.g, 0.02f),
+            UIFactory.AccentOrange.b / Mathf.Max(baseColor.b, 0.02f),
+            1f);
+        var colors = btn.colors;
+        colors.highlightedColor = tint;
+        colors.selectedColor = tint;
+        btn.colors = colors;
+    }
+
     static FighterCardFX AttachFx(RectTransform card)
     {
         var anchorGo = new GameObject("PopupAnchor", typeof(RectTransform));
@@ -396,15 +574,25 @@ public class BattleScreen : UIScreen
         return fx;
     }
 
+    // Milestone 64, Part 4: label now bold (was the same weight as every
+    // other muted caption in the game - easy to skim past) and the value
+    // moved off the bar into its own dedicated zone (was overlaid directly
+    // on top of the slider's right end, competing with the fill color for
+    // legibility) - label / bar / value now read as three clearly separate
+    // zones left to right instead of two overlapping ones.
     static void BuildStatRow(Transform parent, Vector2 anchorMin, Vector2 anchorMax, string label, Color barColor,
         out Slider slider, out Text valueText)
     {
         var row = UIFactory.CreateContainer(parent, anchorMin, anchorMax);
-        UIFactory.CreateCaption(row, label, new Vector2(0f, 0f), new Vector2(0.18f, 1f));
-        slider = UIFactory.CreateSlider(row, new Vector2(0.2f, 0f), new Vector2(1f, 1f), barColor);
+        var labelText = UIFactory.CreateText(row, label, UIFactory.CaptionSize, UIFactory.MutedTextColor, TextAnchor.MiddleLeft,
+            new Vector2(0f, 0f), new Vector2(0.16f, 1f), FontStyle.Bold);
+        labelText.resizeTextForBestFit = true;
+        labelText.resizeTextMinSize = 9;
+        labelText.resizeTextMaxSize = UIFactory.CaptionSize;
+        slider = UIFactory.CreateSlider(row, new Vector2(0.18f, 0f), new Vector2(0.76f, 1f), barColor);
         if (label == "STM") slider.GetComponent<SmoothSlider>().SetLowEmphasis(true);
         valueText = UIFactory.CreateText(row, "", UIFactory.CaptionSize, UIFactory.CreamColor, TextAnchor.MiddleRight,
-            new Vector2(0.2f, 0f), new Vector2(0.98f, 1f));
+            new Vector2(0.78f, 0f), new Vector2(1f, 1f), FontStyle.Bold);
     }
 
     public void Refresh()
@@ -500,10 +688,16 @@ public class BattleScreen : UIScreen
             : rivalFight
                 ? new Color(RivalDatabase.AccentColor.r, RivalDatabase.AccentColor.g, RivalDatabase.AccentColor.b, 0.26f)
                 : new Color(UIFactory.GoldColor.r, UIFactory.GoldColor.g, UIFactory.GoldColor.b, 0.22f);
-        playerCombatantRoot.anchorMin = championshipFight ? new Vector2(0.01f, 0.01f) : new Vector2(0.04f, 0.03f);
-        playerCombatantRoot.anchorMax = championshipFight ? new Vector2(0.49f, 1f) : new Vector2(0.48f, 0.98f);
-        opponentCombatantRoot.anchorMin = championshipFight ? new Vector2(0.51f, 0.01f) : new Vector2(0.52f, 0.03f);
-        opponentCombatantRoot.anchorMax = championshipFight ? new Vector2(0.99f, 1f) : new Vector2(0.96f, 0.98f);
+        // Milestone 64, Part 8: baseline (non-championship) fighters grown
+        // closer to the championship box (was 0.04-0.48/0.03-0.98, a visibly
+        // smaller, more inset box than championship's 0.01-0.49/0.01-1.0 for
+        // no presentational reason) - championship still reads slightly
+        // bigger (the intentional "this fight feels bigger" distinction is
+        // kept), but regular fights no longer leave extra unused margin.
+        playerCombatantRoot.anchorMin = championshipFight ? new Vector2(0.01f, 0.01f) : new Vector2(0.02f, 0.01f);
+        playerCombatantRoot.anchorMax = championshipFight ? new Vector2(0.49f, 1f) : new Vector2(0.48f, 0.99f);
+        opponentCombatantRoot.anchorMin = championshipFight ? new Vector2(0.51f, 0.01f) : new Vector2(0.52f, 0.01f);
+        opponentCombatantRoot.anchorMax = championshipFight ? new Vector2(0.99f, 1f) : new Vector2(0.98f, 0.99f);
         playerCombatant.Initialize(playerBattleSprite, "player", GM.Player.Archetype, playerTheme, faceRight: true);
         opponentCombatant.Initialize(opponentBattleSprite, GM.CurrentOpponentInfo?.OpponentId, introOpponentArchetype,
             opponentTheme, faceRight: false);
@@ -528,9 +722,14 @@ public class BattleScreen : UIScreen
                 var move = moves[i];
                 // Milestone 41, Part 1/2: the lightweight [Tag] now travels with
                 // the move into the move-selection buttons too, not just the
-                // Moves Screen - a colored rich-text tag, no new UI element.
-                string tagHex = ColorUtility.ToHtmlStringRGB(IconFactory.GetMoveCategoryColor(move.Category));
-                moveLabels[i].text = $"{move.Name}\n({move.StaminaCost} stam) <color=#{tagHex}>[{IconFactory.GetMoveCategoryLabel(move.Category)}]</color>";
+                // Moves Screen. Milestone 64, Part 5: split across the 3 tiered
+                // Texts instead of one rich-text string - the tag's category
+                // color now sets moveTagTexts[i].color directly rather than an
+                // inline <color> tag, since it's a standalone element now.
+                moveNameTexts[i].text = move.Name;
+                moveCostTexts[i].text = $"{move.StaminaCost} Stamina";
+                moveTagTexts[i].text = IconFactory.GetMoveCategoryLabel(move.Category);
+                moveTagTexts[i].color = IconFactory.GetMoveCategoryColor(move.Category);
             }
         }
 
@@ -827,12 +1026,15 @@ public class BattleScreen : UIScreen
         FightPresentationGenerator.GetFlavorStats(gm.Player.Archetype, "player_" + gm.Player.Archetype, gm.HasBecomeChampion(),
             out int playerAge, out int playerReach, out string playerStyle);
 
-        // Milestone 45, Part 6: appended onto the existing archetype/level
-        // line rather than as its own line - this block is already the
-        // densest text in the game (5 lines via best-fit), and one consistent
-        // format (PrestigeSystem.FormatLevel) used everywhere Prestige shows.
-        introPlayerName.text =
-            $"{gm.Player.Name}\n\"{playerNickname}\"\n{playerArchetype}  -  Lv.{gm.Player.Stats.Level}  -  {PrestigeSystem.FormatLevel(gm.PrestigeLevel)}\n" +
+        // Milestone 64, Part 2/5: same exact data as before (Milestone 45's
+        // Prestige line included), just split across the 3 tiered fields
+        // instead of crammed into one block - Name gets its own prominent
+        // line, Nickname its own styled line, everything else (archetype/
+        // level/Prestige, record/streak, flavor stats) groups into Details.
+        introPlayerNameText.text = gm.Player.Name;
+        introPlayerNicknameText.text = string.IsNullOrEmpty(playerNickname) ? "" : $"\"{playerNickname}\"";
+        introPlayerDetailsText.text =
+            $"{playerArchetype}  -  Lv.{gm.Player.Stats.Level}  -  {PrestigeSystem.FormatLevel(gm.PrestigeLevel)}\n" +
             $"{playerRecord}{(string.IsNullOrEmpty(playerStreak) ? "" : "  (" + playerStreak + ")")}\n" +
             FightPresentationGenerator.FormatFlavorLine(playerAge, playerReach, playerStyle);
 
@@ -846,8 +1048,9 @@ public class BattleScreen : UIScreen
         FightPresentationGenerator.GetFlavorStats(introOpponentArchetype, opponentInfo?.OpponentId ?? "opponent", impressiveOpponent,
             out int opponentAge, out int opponentReach, out string opponentStyle);
 
-        introOpponentName.text =
-            $"{gm.CurrentOpponent.Name}{(string.IsNullOrEmpty(opponentNickname) ? "" : "\n\"" + opponentNickname + "\"")}\n" +
+        introOpponentNameText.text = gm.CurrentOpponent.Name;
+        introOpponentNicknameText.text = string.IsNullOrEmpty(opponentNickname) ? "" : $"\"{opponentNickname}\"";
+        introOpponentDetailsText.text =
             $"{opponentArchetype}  -  Lv.{gm.CurrentOpponent.Stats.Level}\n" +
             $"{opponentRecord}{(string.IsNullOrEmpty(opponentStreakText) ? "" : "  (" + opponentStreakText + ")")}\n" +
             FightPresentationGenerator.FormatFlavorLine(opponentAge, opponentReach, opponentStyle);
@@ -900,7 +1103,16 @@ public class BattleScreen : UIScreen
     {
         string key = GetBattleBackgroundKey();
         if (ArtRegistry.GetBackground(key) == null) key = BackgroundStandard;
-        UIFactory.ApplyScreenBackground(stageCard.gameObject, key);
+        // Milestone 64, Part 1: stageCard is a wide, short strip (most of the
+        // screen's width but well under its full height) - much flatter than
+        // the ~16:9 source art, so the old preserveAspect "contain" fit left
+        // large empty bars on both sides showing the card's own dark fill
+        // through (the "black panels" this part calls out). coverFit scales
+        // the art to fill the strip completely instead; RectMask2D clips the
+        // resulting vertical overflow so it never spills onto the fighter
+        // cards/log/buttons that sit just outside stageCard.
+        if (stageCard.GetComponent<RectMask2D>() == null) stageCard.gameObject.AddComponent<RectMask2D>();
+        UIFactory.ApplyScreenBackground(stageCard.gameObject, key, coverFit: true);
     }
 
     // Milestone 37, Parts 2-6: most-specific fight type first - the Shadow
@@ -1820,6 +2032,10 @@ public class BattleScreen : UIScreen
 
     // Appends only the new lines instead of rejoining the whole history every turn,
     // so a long battle's log doesn't get more expensive to update as it grows.
+    // Milestone 64, Part 2: cap raised from 4 to 60 now that the log panel is
+    // a real ScrollRect - long fights keep real scrollback instead of losing
+    // everything past the last 4 lines, and ScrollLogToBottom keeps the
+    // newest line in view exactly like the old fixed-4 behavior did.
     void AppendLog(List<string> lines)
     {
         if (lines.Count == 0) return;
@@ -1828,8 +2044,19 @@ public class BattleScreen : UIScreen
         foreach (var line in lines) formatted.Add(FormatLogLine(line));
         log.AddRange(formatted);
 
-        while (log.Count > 4) log.RemoveAt(0);
+        while (log.Count > 60) log.RemoveAt(0);
         logText.text = string.Join("\n", log);
+        ScrollLogToBottom();
+    }
+
+    // Milestone 64, Part 2: forces an immediate layout pass so the
+    // ContentSizeFitter-driven content height is current before reading/
+    // setting scroll position - without this, verticalNormalizedPosition
+    // would be computed against last frame's (shorter) content height.
+    void ScrollLogToBottom()
+    {
+        Canvas.ForceUpdateCanvases();
+        logScroll.verticalNormalizedPosition = 0f;
     }
 
     // Colors key moments (crit, miss, exhausted, status, regen) so the log reads at a glance.

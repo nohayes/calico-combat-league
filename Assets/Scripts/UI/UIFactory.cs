@@ -506,24 +506,29 @@ public static class UIFactory
     // Builds a "fighter vs fighter" presentation card: a portrait frame on the left,
     // and an open info area on the right where the caller places name/level/bars.
     // Use SetFighterPortrait to fill the portrait with real art or a placeholder.
+    // Milestone 64, Part 3: portrait frame widened 0.02-0.28 (26% of card
+    // width) -> 0.03-0.37 (34%) for a noticeably larger portrait, with a
+    // matching 3% left margin (was 2%) for "consistent margins" on both
+    // sides of the card. infoArea starts a touch later (0.40, was 0.3) to
+    // keep a clean gap from the larger frame instead of touching it.
     public static RectTransform CreateFighterCard(Transform parent, string cardName, Vector2 anchorMin, Vector2 anchorMax,
         out Image portraitImage, out RectTransform infoArea)
     {
         var card = CreateCard(parent, "FighterCard_" + cardName, anchorMin, anchorMax, CardColor);
 
-        var frame = CreateCard(card, "PortraitFrame", new Vector2(0.02f, 0.06f), new Vector2(0.28f, 0.94f), BackgroundColor);
+        var frame = CreateCard(card, "PortraitFrame", new Vector2(0.03f, 0.05f), new Vector2(0.37f, 0.95f), BackgroundColor);
 
         var portraitGo = new GameObject("Portrait", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         portraitGo.transform.SetParent(frame, false);
         var portraitRt = portraitGo.GetComponent<RectTransform>();
-        portraitRt.anchorMin = new Vector2(0.12f, 0.1f);
-        portraitRt.anchorMax = new Vector2(0.88f, 0.92f);
+        portraitRt.anchorMin = new Vector2(0.08f, 0.06f);
+        portraitRt.anchorMax = new Vector2(0.92f, 0.96f);
         portraitRt.offsetMin = Vector2.zero;
         portraitRt.offsetMax = Vector2.zero;
         portraitImage = portraitGo.GetComponent<Image>();
         portraitImage.preserveAspect = true;
 
-        infoArea = CreateContainer(card, new Vector2(0.3f, 0f), new Vector2(0.98f, 1f));
+        infoArea = CreateContainer(card, new Vector2(0.40f, 0f), new Vector2(0.97f, 1f));
 
         return card;
     }
@@ -813,7 +818,7 @@ public static class UIFactory
     // (already set by CreatePanel) remains the background - a safe, silent fallback.
     // Safe to call repeatedly (e.g. once per gym visit) - replaces any previous
     // background rather than stacking duplicates.
-    public static void ApplyScreenBackground(GameObject root, string key, bool addReadabilityTint = true)
+    public static void ApplyScreenBackground(GameObject root, string key, bool addReadabilityTint = true, bool coverFit = false)
     {
         var existing = root.transform.Find("Background");
         if (existing != null) Object.Destroy(existing.gameObject);
@@ -825,17 +830,51 @@ public static class UIFactory
         go.transform.SetParent(root.transform, false);
         go.transform.SetAsFirstSibling();
         var rt = go.GetComponent<RectTransform>();
-        SetStretch(rt);
         var image = go.GetComponent<Image>();
         image.sprite = background;
         image.color = Color.white;
         image.raycastTarget = false;
-        // Milestone 26: existing backgrounds are portrait (9:16); the frame is now
-        // landscape (16:9). preserveAspect shows the full image undistorted
-        // (pillarboxed) instead of stretching it, with zero changes needed once
-        // landscape-shaped (1920x1080) art replaces these - it will simply fill
-        // edge-to-edge with no visible letterbox at that point.
-        image.preserveAspect = true;
+
+        // Milestone 64, Part 1: coverFit is for non-16:9 sub-rects (e.g. the
+        // battle arena strip, which is much wider/flatter than the source
+        // art) - plain preserveAspect there "fits entirely within bounds",
+        // which pillarboxes hard and shows the panel's own dark fill as
+        // large empty bars on both sides. Scaling to fill the rect fully
+        // (cropping the overflow instead of letterboxing it) keeps the art
+        // undistorted with no visible bars. Requires the caller's rect to
+        // add a RectMask2D so the overflow is actually clipped.
+        if (coverFit)
+        {
+            var parentRect = ((RectTransform)root.transform).rect;
+            float containerAspect = parentRect.width / parentRect.height;
+            float imageAspect = (float)background.rect.width / background.rect.height;
+            float coverWidth, coverHeight;
+            if (imageAspect > containerAspect)
+            {
+                coverHeight = parentRect.height;
+                coverWidth = coverHeight * imageAspect;
+            }
+            else
+            {
+                coverWidth = parentRect.width;
+                coverHeight = coverWidth / imageAspect;
+            }
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(coverWidth, coverHeight);
+        }
+        else
+        {
+            SetStretch(rt);
+            // Milestone 26: existing backgrounds are portrait (9:16); the frame is
+            // now landscape (16:9). preserveAspect shows the full image undistorted
+            // (pillarboxed) instead of stretching it, with zero changes needed once
+            // landscape-shaped (1920x1080) art replaces these - it will simply fill
+            // edge-to-edge with no visible letterbox at that point.
+            image.preserveAspect = true;
+        }
 
         if (!addReadabilityTint) return;
 
