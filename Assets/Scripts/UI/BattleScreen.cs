@@ -283,7 +283,6 @@ public class BattleScreen : UIScreen
         logTextRt.anchorMin = new Vector2(0f, 1f);
         logTextRt.anchorMax = new Vector2(1f, 1f);
         logTextRt.pivot = new Vector2(0.5f, 1f);
-        logTextRt.offsetMin = new Vector2(logTextRt.offsetMin.x, logTextRt.offsetMin.y);
         logTextRt.sizeDelta = new Vector2(0f, 0f);
         logTextRt.anchoredPosition = Vector2.zero;
         var logFitter = logText.gameObject.AddComponent<ContentSizeFitter>();
