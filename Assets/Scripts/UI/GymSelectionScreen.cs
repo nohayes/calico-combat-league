@@ -229,22 +229,15 @@ public class GymSelectionScreen : UIScreen
         }
     }
 
-    // Milestone 54, Part 2/3/6: one combined info string per gym card -
-    // personality tag (if any), lesson learned/pending (Milestone 52/53
-    // data, read directly from GymInfo.LessonText, never duplicated), and
-    // the move reward earned/pending (resolved from GymInfo.UnlockMoveId via
-    // the existing MoveDatabase lookup). Each line only appears if there's
-    // real data behind it, so Championship (no personality, no LessonText)
-    // naturally shows just its reward line.
+    // Milestone 63, Part 2/6: priority order per the brief - reward, then
+    // scouting report, then lesson text. Milestone 54's old static
+    // GymType-keyed "Combo-Focused"-style tag is replaced outright by the
+    // real Milestone 62 personality-derived report (richer, no longer a
+    // placeholder). Each line only appears if there's real data behind it,
+    // so Championship (no LessonText) naturally shows just reward + report.
     static string BuildGymInfoBlock(GymInfo gym, bool completed)
     {
         var lines = new List<string>();
-
-        string personality = GetGymPersonality(gym.GymType);
-        if (!string.IsNullOrEmpty(personality)) lines.Add(personality);
-
-        if (!string.IsNullOrEmpty(gym.LessonText))
-            lines.Add(completed ? $"✓ Lesson: {gym.LessonText}" : "Lesson: Not Learned Yet");
 
         var rewardMove = MoveDatabase.GetById(gym.UnlockMoveId);
         if (rewardMove != null)
@@ -254,21 +247,22 @@ public class GymSelectionScreen : UIScreen
                 : $"Reward: {rewardMove.Name.ToUpperInvariant()}");
         }
 
-        return string.Join("\n", lines);
-    }
-
-    // Milestone 54, Part 6: small, static personality tags - no new data,
-    // no new systems, just naming the identity Milestone 51 already built.
-    static string GetGymPersonality(GymType type)
-    {
-        switch (type)
+        string report = ScoutingReportGenerator.GetGymReport(gym);
+        if (!string.IsNullOrEmpty(report))
         {
-            case GymType.Boxing: return "Combo-Focused";
-            case GymType.MuayThai: return "Pressure-Focused";
-            case GymType.Wrestling: return "Control-Focused";
-            case GymType.BrazilianJiuJitsu: return "Submission-Focused";
-            default: return null;
+            var reportLines = report.Split('\n');
+            // Gold "SCOUTING:" label inline on the descriptor's own line
+            // (Part 4) rather than a separate header line - keeps the whole
+            // report to 2 lines instead of 3, since this card is already
+            // sharing space with the reward/lesson lines above and below.
+            lines.Add(reportLines.Length > 0 ? $"<color=#D8A63C>SCOUTING:</color> {reportLines[0]}" : "");
+            for (int i = 1; i < reportLines.Length; i++) lines.Add(reportLines[i]);
         }
+
+        if (!string.IsNullOrEmpty(gym.LessonText))
+            lines.Add(completed ? $"✓ Lesson: {gym.LessonText}" : "Lesson: Not Learned Yet");
+
+        return string.Join("\n", lines);
     }
 
     // Milestone 30 (relocation): Street Fight as a first-class progression
@@ -279,10 +273,17 @@ public class GymSelectionScreen : UIScreen
         GetCardAnchors(index, gridBottom, out Vector2 anchorMin, out Vector2 anchorMax);
         var iconSprite = IconFactory.GetShapeSprite(IconShape.Diamond);
 
+        // Milestone 63, Part 3/5: Street Fight's report + "STYLE: Unknown" -
+        // opponents are randomized per fight, so unlike the gyms there's no
+        // single personality to derive from; the brief's own fixed report
+        // already says exactly that.
+        string description =
+            $"{ScoutingReportGenerator.StreetFightReport}\n\n<color=#D8A63C>STYLE:</color> Unknown";
+
         BuildCard(anchorMin, anchorMax, UIFactory.AccentOrange, true,
             () => GM.ChangeState(GameState.StreetFight),
             iconSprite, UIFactory.CreamColor, "STREET FIGHT", null, UIFactory.MutedTextColor,
-            "Random opponents.\nRisk and reward.\nTrain outside the gym system.", null, UIFactory.AccentOrange);
+            description, null, UIFactory.AccentOrange);
     }
 
     // Shared card chrome: a colored border card with an inset dark fill, an
@@ -376,7 +377,12 @@ public class GymSelectionScreen : UIScreen
     void BuildShadowBanner(Vector2 anchorMin, Vector2 anchorMax)
     {
         bool defeated = GM.HasDefeatedShadowChampion;
-        string tagline = defeated ? "Defeated - \"True Champion\" earned" : "The final test awaits...";
+        // Milestone 63, Part 3/4: the scouting report folded into this
+        // banner's one existing label line (no layout change) - skipped once
+        // defeated, since "expect X" stops being useful information.
+        string tagline = defeated
+            ? "Defeated - \"True Champion\" earned"
+            : $"The final test awaits... {ScoutingReportGenerator.MirrorMatchReport.Replace('\n', ' ')}";
         Color color = defeated ? UIFactory.PositiveColor : new Color(0.55f, 0.6f, 0.68f, 1f);
 
         var button = UIFactory.CreateCardButton(Root.transform, "MirrorMatch", anchorMin, anchorMax,
@@ -432,7 +438,10 @@ public class GymSelectionScreen : UIScreen
         iconImage.preserveAspect = true;
         iconImage.raycastTarget = false;
 
-        var label = UIFactory.CreateText(button.transform, $"RIVAL SHOWDOWN  -  {RivalDatabase.RivalName} is waiting.",
+        // Milestone 63, Part 3/4: the scouting report folded into this
+        // banner's one existing label line - no new element, no layout change.
+        var label = UIFactory.CreateText(button.transform,
+            $"RIVAL SHOWDOWN  -  {RivalDatabase.RivalName} is waiting. {ScoutingReportGenerator.RivalReport.Replace('\n', ' ')}",
             UIFactory.BodySize, UIFactory.CreamColor, TextAnchor.MiddleLeft, new Vector2(0.07f, 0f), new Vector2(0.97f, 1f), FontStyle.Bold);
         label.resizeTextForBestFit = true;
         label.resizeTextMinSize = 12;

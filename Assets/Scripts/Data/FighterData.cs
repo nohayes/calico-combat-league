@@ -19,6 +19,12 @@ public class FighterData
     // fighter except Wrestling gym opponents.
     public int DefenseBiasPercent;
 
+    // Milestone 62, Part 1/3/11: forwarded from OpponentInfo.Personality the
+    // same way - None (no change) unless explicitly assigned. Never saved;
+    // personalities belong to the fighter definitions in GymDatabase/
+    // RivalDatabase/StreetFightGenerator, not to player save data.
+    public FighterPersonality Personality;
+
     public FighterData(string name, FighterStats stats, List<MoveData> knownMoves, List<MoveData> equippedMoves = null)
     {
         Name = name;

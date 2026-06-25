@@ -77,6 +77,9 @@ public class BattleScreen : UIScreen
     const int TauntPlayerCombo = 3;
     const int TauntRivalCombo = 4;
     const int TauntFinalPhase = 5;
+    // Milestone 62, Part 8: Scratch's own personality-driven reaction to
+    // landing a critical hit on the player - same once-per-fight mechanism.
+    const int TauntRivalCriticalHit = 6;
 
     // Milestone 32: the opponent's "portrait archetype" used for both the
     // battle-stage portrait and the intro's Tale of the Tape archetype row -
@@ -88,6 +91,13 @@ public class BattleScreen : UIScreen
     // before EndBattle is called.
     int turnsThisFight;
     string lastComboNameThisFight;
+
+    // Milestone 62, Part 6/7/12: a simple turn-gap cooldown so commentary
+    // never fires two turns in a row - reset every Refresh() like every
+    // other per-fight counter above. Starts high so a strong trigger can
+    // still fire on an early turn rather than always waiting out a cooldown
+    // that hasn't actually been "used" yet.
+    int turnsSinceLastCommentary = 99;
 
     // Milestone 36, Part 4: LEVEL/ARCHETYPE/RECORD moved into the identity
     // block above this table (alongside the new nickname/streak/flavor text),
@@ -415,6 +425,7 @@ public class BattleScreen : UIScreen
         opponentFx.ClearPopups();
         turnsThisFight = 0;
         lastComboNameThisFight = null;
+        turnsSinceLastCommentary = 99;
         usedTauntIndices.Clear();
 
         // Names, portraits and the intro quote only change once per battle, so they're set here rather than every turn.
@@ -572,8 +583,19 @@ public class BattleScreen : UIScreen
         // for major fights only - prepended onto the existing announcement
         // text, same element, same timing, no new beat/delay.
         string walkout = GetWalkoutLine();
+        // Milestone 62, Part 4: the opponent's personality, shown the same
+        // lightweight way - one extra line, only when one is actually
+        // assigned (None shows nothing, e.g. regular gym trainers that
+        // didn't get one). One-time per fight, not a per-turn cost.
+        string personalityLine = GM.CurrentOpponentInfo != null && GM.CurrentOpponentInfo.Personality != FighterPersonality.None
+            ? $"STYLE: {FighterPersonalityTraits.GetDisplayName(GM.CurrentOpponentInfo.Personality)}"
+            : "";
         string announcement = GetFightAnnouncement(championship, leaderFight, rematch, IsStreetFight(), IsRivalFight(), introMirrorFight);
-        introAnnouncementText.text = string.IsNullOrEmpty(walkout) ? announcement : $"{walkout}\n{announcement}";
+        var introLines = new List<string>();
+        if (!string.IsNullOrEmpty(walkout)) introLines.Add(walkout);
+        if (!string.IsNullOrEmpty(personalityLine)) introLines.Add(personalityLine);
+        introLines.Add(announcement);
+        introAnnouncementText.text = string.Join("\n", introLines);
         introText.text = "";
         introMatchupGroup.gameObject.SetActive(true);
         introTapeGroup.gameObject.SetActive(false);
@@ -946,6 +968,8 @@ public class BattleScreen : UIScreen
         int triggered = -1;
         if (!usedTauntIndices.Contains(TauntFinalPhase) && (playerRatio < 0.2f || rivalRatio < 0.2f))
             triggered = TauntFinalPhase;
+        else if (!usedTauntIndices.Contains(TauntRivalCriticalHit) && LogHasCriticalHitBy(turnLog, GM.CurrentOpponent.Name))
+            triggered = TauntRivalCriticalHit;
         else if (!usedTauntIndices.Contains(TauntRivalCombo) && LogHasComboBy(turnLog, GM.CurrentOpponent.Name))
             triggered = TauntRivalCombo;
         else if (!usedTauntIndices.Contains(TauntPlayerCombo) && LogHasComboBy(turnLog, GM.Player.Name))
@@ -975,10 +999,111 @@ public class BattleScreen : UIScreen
         return false;
     }
 
+    // Milestone 62, Part 8: same name-prefixed substring-match pattern as
+    // LogHasComboBy above - "lands a CRITICAL" is the exact phrase
+    // ResolveMove's crit hit-line already uses.
+    static bool LogHasCriticalHitBy(List<string> log, string fighterName)
+    {
+        for (int i = 0; i < log.Count; i++)
+            if (log[i].StartsWith(fighterName) && log[i].Contains("lands a CRITICAL")) return true;
+        return false;
+    }
+
     static bool LogHasFighterDefense(List<string> log, string fighterName)
     {
         for (int i = 0; i < log.Count; i++)
             if (log[i].StartsWith(fighterName) && (log[i].Contains("PARRY!") || log[i].Contains("CLINCH SUCCESS!"))) return true;
+        return false;
+    }
+
+    // Milestone 62, Part 5/6/7/12: lightweight "crowd commentary" - reuses
+    // the exact rich-text/log-append pattern the rival taunts above already
+    // use (no new popup system, no risk to BattleScreen's existing keyword
+    // parsing - verified none of these lines contain any of FormatLogLine's
+    // or TryGetAttack's trigger substrings). Gated by a turn cooldown plus a
+    // probability roll scaled by fight progress, so it's occasional, not
+    // constant, and ramps up as the fight gets more dramatic (Part 7).
+    // Skipped for Rival fights entirely - MaybeInjectRivalTaunt above
+    // already owns that fight's commentary; duplicating it here would spam.
+    static readonly string[] ComboCommentary = { "Huge combination!", "What a sequence!", "The crowd loves that!" };
+    static readonly string[] CriticalHitCommentary = { "That shot landed clean!", "The crowd felt that one!", "Devastating!" };
+    static readonly string[] ParryCommentary = { "Beautiful counter!", "Excellent defense!", "Read that perfectly!" };
+    static readonly string[] ClinchCommentary = { "Smart clinch work!", "Smothering the attack!" };
+    static readonly string[] HugeDamageCommentary = { "The crowd loves it!", "That's going to leave a mark!" };
+    static readonly string[] LowHealthCommentary = { "One mistake could end it!", "This is getting dangerous!" };
+    static readonly string[] CloseFinishCommentary = { "This fight has turned into a war!", "Either fighter could finish this!" };
+
+    // Milestone 62, Part 9: Mirror Match gets its own much quieter,
+    // introspective pool instead - "avoid crowd hype" per the brief.
+    static readonly string[] MirrorMatchCommentary =
+    {
+        "You know every weakness.",
+        "No one knows your habits better.",
+        "One fighter refuses to break.",
+        "Every move, already familiar."
+    };
+
+    const int HugeDamageThreshold = 18;
+
+    void MaybeInjectCommentary(List<string> turnLog, int dealt, int taken)
+    {
+        if (IsRivalFight() || GM.Player == null || GM.CurrentOpponent == null) return;
+        turnsSinceLastCommentary++;
+        if (turnsSinceLastCommentary < 2) return;
+
+        if (IsMirrorMatch())
+        {
+            MaybeInjectMirrorMatchCommentary(turnLog);
+            return;
+        }
+
+        float playerRatio = (float)GM.Player.Stats.CurrentHealth / GM.Player.Stats.MaxHealth;
+        float opponentRatio = (float)GM.CurrentOpponent.Stats.CurrentHealth / GM.CurrentOpponent.Stats.MaxHealth;
+        bool eitherLow = playerRatio < 0.2f || opponentRatio < 0.2f;
+        bool closeFinish = playerRatio < 0.3f && opponentRatio < 0.3f;
+
+        string[] pool;
+        if (closeFinish) pool = CloseFinishCommentary;
+        else if (eitherLow) pool = LowHealthCommentary;
+        else if (LogContains(turnLog, "lands a COMBO!")) pool = ComboCommentary;
+        else if (LogContains(turnLog, "lands a CRITICAL")) pool = CriticalHitCommentary;
+        else if (Mathf.Max(dealt, taken) >= HugeDamageThreshold) pool = HugeDamageCommentary;
+        else if (LogContains(turnLog, "PARRY!")) pool = ParryCommentary;
+        else if (LogContains(turnLog, "CLINCH SUCCESS!")) pool = ClinchCommentary;
+        else return;
+
+        // Part 7: crowd energy - almost none early, occasional by mid-fight,
+        // more energetic once either fighter is in real danger.
+        int chance = turnsThisFight <= 3 ? 8 : turnsThisFight <= 8 ? 18 : 30;
+        if (eitherLow || closeFinish) chance += 15;
+        if (UnityEngine.Random.Range(0, 100) >= chance) return;
+
+        turnsSinceLastCommentary = 0;
+        string line = pool[UnityEngine.Random.Range(0, pool.Length)];
+        turnLog.Add($"<i><color=#C8C2B4>{line}</color></i>");
+    }
+
+    void MaybeInjectMirrorMatchCommentary(List<string> turnLog)
+    {
+        bool meaningfulMoment = LogContains(turnLog, "lands a COMBO!") || LogContains(turnLog, "lands a CRITICAL");
+        float playerRatio = (float)GM.Player.Stats.CurrentHealth / GM.Player.Stats.MaxHealth;
+        float opponentRatio = (float)GM.CurrentOpponent.Stats.CurrentHealth / GM.CurrentOpponent.Stats.MaxHealth;
+        bool eitherLow = playerRatio < 0.2f || opponentRatio < 0.2f;
+        if (!meaningfulMoment && !eitherLow) return;
+
+        // Part 9: deliberately rare - no crowd-energy ramp, just an
+        // occasional quiet observation.
+        if (UnityEngine.Random.Range(0, 100) >= 12) return;
+
+        turnsSinceLastCommentary = 0;
+        string line = MirrorMatchCommentary[UnityEngine.Random.Range(0, MirrorMatchCommentary.Length)];
+        turnLog.Add($"<i><color=#C8C2B4>{line}</color></i>");
+    }
+
+    static bool LogContains(List<string> log, string keyword)
+    {
+        for (int i = 0; i < log.Count; i++)
+            if (log[i].Contains(keyword)) return true;
         return false;
     }
 
@@ -1186,6 +1311,7 @@ public class BattleScreen : UIScreen
         GM.RecordCombatStats(dealt, taken);
 
         MaybeInjectRivalTaunt(turnLog);
+        MaybeInjectCommentary(turnLog, dealt, taken);
         AppendLog(turnLog);
         UpdateBars();
         UpdateComboChainDisplay();
@@ -1218,6 +1344,7 @@ public class BattleScreen : UIScreen
         GM.RecordCombatStats(dealt, taken);
 
         MaybeInjectRivalTaunt(turnLog);
+        MaybeInjectCommentary(turnLog, dealt, taken);
         AppendLog(turnLog);
         UpdateBars();
         UpdateComboChainDisplay();
@@ -1252,6 +1379,7 @@ public class BattleScreen : UIScreen
         GM.RecordCombatStats(dealt, taken);
 
         MaybeInjectRivalTaunt(turnLog);
+        MaybeInjectCommentary(turnLog, dealt, taken);
         AppendLog(turnLog);
         UpdateBars();
         UpdateComboChainDisplay();
@@ -1283,6 +1411,7 @@ public class BattleScreen : UIScreen
         GM.RecordCombatStats(dealt, taken);
 
         MaybeInjectRivalTaunt(turnLog);
+        MaybeInjectCommentary(turnLog, dealt, taken);
         AppendLog(turnLog);
         UpdateBars();
         UpdateComboChainDisplay();

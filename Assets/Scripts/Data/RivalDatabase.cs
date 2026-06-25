@@ -157,6 +157,9 @@ public static class RivalDatabase
     // rather than random. The original 3 lines are kept (now Player
     // Struggling / Rival Defense / Rival Struggling); 3 new ones added for
     // Player Combo / Rival Combo / Final Phase.
+    // Milestone 62, Part 8: index 6 added - Scratch's own personality-driven
+    // reaction to landing a critical hit on the player, same one-per-fight
+    // mechanism as every entry above.
     public static readonly string[] ShowdownTaunts =
     {
         "That's all you've got?",                  // 0: player below half health
@@ -164,7 +167,8 @@ public static class RivalDatabase
         "Now you're fighting like a champion.",     // 2: rival below half health
         "That combo almost looked intentional.",    // 3: player lands a combo
         "You feel that? That's pressure.",          // 4: rival lands a combo
-        "Don't blink now."                          // 5: final low-health phase
+        "Don't blink now.",                         // 5: final low-health phase
+        "You walked into that."                     // 6: rival lands a critical hit
     };
 
     // Milestone 39, Part 7: shown when the player wins the Rival Showdown -

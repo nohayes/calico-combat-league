@@ -45,6 +45,16 @@ public static class StreetFightGenerator
     public const string SecretFighterOpponentId = "fighter_secret";
     const int SecretFighterChancePercent = 8;
 
+    // Milestone 62, Part 3: "Street Fight opponents may be randomized" -
+    // every gym-assignable personality except Adaptive (Mirror Match-only).
+    static readonly FighterPersonality[] RandomPersonalities =
+    {
+        FighterPersonality.Aggressive, FighterPersonality.PressureFighter, FighterPersonality.CounterFighter,
+        FighterPersonality.Patient, FighterPersonality.SubmissionHunter, FighterPersonality.WrestlingSpecialist,
+        FighterPersonality.KnockoutArtist, FighterPersonality.Showman, FighterPersonality.Veteran,
+        FighterPersonality.CalmTechnician, FighterPersonality.Calculated, FighterPersonality.WildBrawler
+    };
+
     public static StreetFightOpponent Generate(GameManager gm)
     {
         var rng = new System.Random();
@@ -108,7 +118,8 @@ public static class StreetFightGenerator
             Bio = "Just another local fighter looking to make a name for themself.",
             LossLine = "Alright, alright - you got me. Catch me on a better day.",
             WinLine = "Street rules, baby. Go home and train some more.",
-            Quote = GetQuote(difficulty)
+            Quote = GetQuote(difficulty),
+            Personality = RandomPersonalities[rng.Next(RandomPersonalities.Length)]
         };
 
         return new StreetFightOpponent
@@ -170,7 +181,10 @@ public static class StreetFightGenerator
             Bio = "No one knows where this fighter came from. They only show up for those who've already proven everything else.",
             LossLine = "...Interesting.",
             WinLine = "Not yet.",
-            Quote = "You've already beaten everyone else. Let's see how far you've really come."
+            Quote = "You've already beaten everyone else. Let's see how far you've really come.",
+            // Milestone 62, Part 3: deliberate, not randomized - fits "no one
+            // knows where this fighter came from" better than a coin-flip.
+            Personality = FighterPersonality.Calculated
         };
 
         return new StreetFightOpponent

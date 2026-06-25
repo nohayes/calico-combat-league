@@ -15,7 +15,7 @@ public static class GymDatabase
         int health, int stamina, int strength, int defense, int speed, int striking, int grappling, int submission,
         int rewardXP, int rewardCoins, string nickname = "", string quote = "", string description = "",
         string bio = "", string lossLine = "", string winLine = "",
-        bool isSmartFighter = false, int defenseBias = 0)
+        bool isSmartFighter = false, int defenseBias = 0, FighterPersonality personality = FighterPersonality.None)
     {
         return new OpponentInfo
         {
@@ -35,6 +35,9 @@ public static class GymDatabase
             // leaders/Wrestling opponents below opt in.
             IsSmartFighter = isSmartFighter,
             DefenseBiasPercent = defenseBias,
+            // Milestone 62, Part 3: defaults to None (no behavioral change)
+            // for any call site that doesn't pass one.
+            Personality = personality,
             Stats = new FighterStats
             {
                 MaxHealth = health,
@@ -72,21 +75,25 @@ public static class GymDatabase
             {
                 CreateOpponent("boxing_trainer_1", "Trainer Chuck", moves, health: 80, stamina: 40, strength: 8, defense: 7, speed: 8, striking: 10, grappling: 5, submission: 4, rewardXP: 15, rewardCoins: 10,
                     nickname: "The Brick Wall", quote: "Hope you brought a lunch. This might take a while.", description: "Immovable in the pocket, Chuck out-walls everyone who tries to out-punch him.",
-                    bio: "Works construction during the day. Boxes every night.", lossLine: "Hah! Okay, that's fair. Good fight, kid.", winLine: "Construction by day, lessons by night. No charge."),
+                    bio: "Works construction during the day. Boxes every night.", lossLine: "Hah! Okay, that's fair. Good fight, kid.", winLine: "Construction by day, lessons by night. No charge.",
+                    personality: FighterPersonality.Aggressive),
                 CreateOpponent("boxing_trainer_2", "Trainer Dustin", moves, health: 90, stamina: 42, strength: 9, defense: 8, speed: 9, striking: 11, grappling: 6, submission: 5, rewardXP: 20, rewardCoins: 12,
                     nickname: "Quick Hands", quote: "I've already pictured this fight. I win. It's a good picture.", description: "Dustin throws combinations faster than most fighters can think.",
-                    bio: "Claims he invented cardio. Nobody can prove otherwise.", lossLine: "Okay WOW. Did NOT picture that one.", winLine: "Called it. I called it in my head. You believe me, right?"),
+                    bio: "Claims he invented cardio. Nobody can prove otherwise.", lossLine: "Okay WOW. Did NOT picture that one.", winLine: "Called it. I called it in my head. You believe me, right?",
+                    personality: FighterPersonality.Aggressive),
                 CreateOpponent("boxing_trainer_3", "Trainer Whit", moves, health: 100, stamina: 45, strength: 10, defense: 9, speed: 9, striking: 12, grappling: 6, submission: 5, rewardXP: 25, rewardCoins: 15,
                     nickname: "Iron Jaw", quote: "You hit like a broken treadmill. I've heard the rumors.", description: "Whit's chin has never been the same fighter's problem twice.",
-                    bio: "Has never lost an argument. Working on fights next.", lossLine: "...There's no counter-argument for that. None.", winLine: "I told you I don't lose. Arguments OR fights.")
+                    bio: "Has never lost an argument. Working on fights next.", lossLine: "...There's no counter-argument for that. None.", winLine: "I told you I don't lose. Arguments OR fights.",
+                    personality: FighterPersonality.KnockoutArtist)
             },
             // Milestone 51, Part 5: "Aggressive" - smart AI seeks combo
             // finishes within Boxing's own pool (Jab/Cross/Hook), which is
             // exactly what an aggressive boxer chasing a finish would do.
+            // Milestone 62, Part 3: Boxing Leader = Aggressive (explicit).
             Leader = CreateOpponent("boxing_leader", "Gym Leader Mouse", moves, health: 130, stamina: 55, strength: 12, defense: 11, speed: 11, striking: 15, grappling: 7, submission: 6, rewardXP: 60, rewardCoins: 30,
                 nickname: "The Closer", quote: "Round one's just the introduction. Stick around for the ending.", description: "Mouse doesn't chase knockouts. He waits for the mistake that gives him one.",
                 bio: "Everyone in the gym wants a shot at the leader's chair. Most regret asking for one.", lossLine: "Hah! Finally - someone who reads past round one.", winLine: "Closer than I expected. That's not a compliment. It's a warning.",
-                isSmartFighter: true)
+                isSmartFighter: true, personality: FighterPersonality.Aggressive)
         };
     }
 
@@ -115,21 +122,25 @@ public static class GymDatabase
             {
                 CreateOpponent("muaythai_trainer_1", "Trainer Niran", trainerMoves, health: 110, stamina: 51, strength: 10, defense: 10, speed: 11, striking: 13, grappling: 8, submission: 6, rewardXP: 30, rewardCoins: 18,
                     nickname: "Whip Leg", quote: "I won't say much. My leg does the talking.", description: "Niran's low kicks have ended more fights than his hands ever will.",
-                    bio: "Trains barefoot on gravel. Says shoes are cheating.", lossLine: "My leg... remembers this. So will I.", winLine: "Told you. The leg talks."),
+                    bio: "Trains barefoot on gravel. Says shoes are cheating.", lossLine: "My leg... remembers this. So will I.", winLine: "Told you. The leg talks.",
+                    personality: FighterPersonality.PressureFighter),
                 CreateOpponent("muaythai_trainer_2", "Trainer Somchai", trainerMoves, health: 120, stamina: 53, strength: 11, defense: 10, speed: 12, striking: 14, grappling: 8, submission: 6, rewardXP: 35, rewardCoins: 20,
                     nickname: "The Elbow", quote: "Personal space is a Western invention. Get comfortable.", description: "Somchai turns the clinch into a minefield.",
-                    bio: "Considers personal space a Western invention.", lossLine: "You found space I didn't know existed.", winLine: "Too close, too late. That's the whole gameplan."),
+                    bio: "Considers personal space a Western invention.", lossLine: "You found space I didn't know existed.", winLine: "Too close, too late. That's the whole gameplan.",
+                    personality: FighterPersonality.PressureFighter),
                 CreateOpponent("muaythai_trainer_3", "Trainer Anan", trainerMoves, health: 130, stamina: 55, strength: 12, defense: 11, speed: 12, striking: 15, grappling: 9, submission: 7, rewardXP: 40, rewardCoins: 22,
                     nickname: "Iron Shin", quote: "Ten thousand kicks thrown. You're about to be kick ten thousand and one.", description: "Anan trades leg kicks like he's allergic to losing.",
-                    bio: "Counts every kick he's ever thrown. Loses count after ten thousand.", lossLine: "Huh. Add that one to the count too, I guess.", winLine: "New number. Same result.")
+                    bio: "Counts every kick he's ever thrown. Loses count after ten thousand.", lossLine: "Huh. Add that one to the count too, I guess.", winLine: "New number. Same result.",
+                    personality: FighterPersonality.WildBrawler)
             },
             // Milestone 51, Part 5: "Pressure fighter" - smart AI's best-power-
             // per-stamina picks naturally lean into sustained heavy striking
             // within Muay Thai's own pool, instead of a random top-half pick.
+            // Milestone 62, Part 3: Muay Thai Leader = Pressure Fighter (explicit).
             Leader = CreateOpponent("muaythai_leader", "Gym Leader Sakda", leaderMoves, health: 160, stamina: 68, strength: 14, defense: 13, speed: 14, striking: 18, grappling: 10, submission: 8, rewardXP: 90, rewardCoins: 45,
                 nickname: "The Storm", quote: "I don't fight in rounds. I fight in waves. Hope you can swim.", description: "Sakda overwhelms with volume until there's nothing left to defend.",
                 bio: "Trained under a teacher who never raised his voice. Sakda kept the calm. Lost the restraint.", lossLine: "...The storm passes eventually. Today was the day.", winLine: "The storm doesn't apologize. Neither do I.",
-                isSmartFighter: true)
+                isSmartFighter: true, personality: FighterPersonality.PressureFighter)
         };
     }
 
@@ -161,23 +172,24 @@ public static class GymDatabase
                 CreateOpponent("wrestling_trainer_1", "Trainer Kurt", trainerMoves, health: 140, stamina: 55, strength: 13, defense: 12, speed: 12, striking: 14, grappling: 14, submission: 8, rewardXP: 45, rewardCoins: 25,
                     nickname: "The Anchor", quote: "Every problem in my life has been solved with a double leg. This one too.", description: "Kurt's takedowns aren't flashy. They're inevitable.",
                     bio: "Believes every problem can be solved with a double leg.", lossLine: "Gravity owed me one. It's still on my tab.", winLine: "Gravity. Undefeated. Just like me.",
-                    defenseBias: 15),
+                    defenseBias: 15, personality: FighterPersonality.WrestlingSpecialist),
                 CreateOpponent("wrestling_trainer_2", "Trainer Brock", trainerMoves, health: 150, stamina: 57, strength: 14, defense: 13, speed: 13, striking: 15, grappling: 15, submission: 9, rewardXP: 50, rewardCoins: 28,
                     nickname: "Big Country", quote: "I once carried a fridge up three flights of stairs. You're lighter than the fridge.", description: "Brock's strength advantage shows up the moment the fight hits the mat.",
                     bio: "Once carried a refrigerator up three flights of stairs. For fun.", lossLine: "Okay. You're heavier than the fridge. Respect.", winLine: "Heavier than the fridge, lighter than my standards.",
-                    defenseBias: 15),
+                    defenseBias: 15, personality: FighterPersonality.Patient),
                 CreateOpponent("wrestling_trainer_3", "Trainer Danny", trainerMoves, health: 160, stamina: 60, strength: 15, defense: 14, speed: 13, striking: 16, grappling: 16, submission: 9, rewardXP: 55, rewardCoins: 30,
                     nickname: "Scramble", quote: "Stand still. I dare you. You won't. Nobody does.", description: "Danny never stops moving, never stops chaining.",
                     bio: "Hasn't stood still since 2019.", lossLine: "Wait, you stood still on purpose? That's... actually smart. Rude, but smart.", winLine: "Told you not to stand still. Nobody listens to Danny.",
-                    defenseBias: 15)
+                    defenseBias: 15, personality: FighterPersonality.CounterFighter)
             },
             // Milestone 51, Part 5: "Control specialist" - smart AI plus the
             // defense bias means Ivanov both grapples efficiently within his
             // own pool AND leans on Parry/Clinch more than any other leader.
+            // Milestone 62, Part 3: Wrestling Leader = Counter Fighter (explicit).
             Leader = CreateOpponent("wrestling_leader", "Gym Leader Ivanov", leaderMoves, health: 190, stamina: 75, strength: 17, defense: 16, speed: 15, striking: 18, grappling: 20, submission: 10, rewardXP: 120, rewardCoins: 60,
                 nickname: "The Vice", quote: "Escape is a theory. Tonight, I disprove it.", description: "Ivanov's top control turns every round into a long, slow squeeze.",
                 bio: "Doesn't talk much. Doesn't need to. The mat says everything for him.", lossLine: "...Theory holds. Noted. Recalculating.", winLine: "Theory disproven. Again.",
-                isSmartFighter: true, defenseBias: 15)
+                isSmartFighter: true, defenseBias: 15, personality: FighterPersonality.CounterFighter)
         };
     }
 
@@ -207,23 +219,27 @@ public static class GymDatabase
             {
                 CreateOpponent("bjj_trainer_1", "Trainer Renzo", trainerMoves, health: 170, stamina: 65, strength: 14, defense: 14, speed: 13, striking: 15, grappling: 16, submission: 17, rewardXP: 60, rewardCoins: 32,
                     nickname: "The Lock", quote: "Tap or nap. Your call. Most pick nap by accident.", description: "Renzo hunts for the joint lock from the moment the fight hits the ground.",
-                    bio: "Falls asleep mid-conversation if it's boring. Never mid-armbar.", lossLine: "Tapped. Properly. Respect where it's due.", winLine: "Sweet dreams. I'll be here when you wake up, still right."),
+                    bio: "Falls asleep mid-conversation if it's boring. Never mid-armbar.", lossLine: "Tapped. Properly. Respect where it's due.", winLine: "Sweet dreams. I'll be here when you wake up, still right.",
+                    personality: FighterPersonality.SubmissionHunter),
                 CreateOpponent("bjj_trainer_2", "Trainer Helio", trainerMoves, health: 180, stamina: 67, strength: 15, defense: 15, speed: 14, striking: 16, grappling: 17, submission: 18, rewardXP: 65, rewardCoins: 35,
                     nickname: "Featherweight", quote: "Size is just a number until I'm on your back counting it for you.", description: "Helio uses leverage to make bigger fighters disappear.",
-                    bio: "Smallest fighter in the gym. Most dangerous on the ground.", lossLine: "Size mattered. Once. Tell no one.", winLine: "Small fighter. Big back. Do the math."),
+                    bio: "Smallest fighter in the gym. Most dangerous on the ground.", lossLine: "Size mattered. Once. Tell no one.", winLine: "Small fighter. Big back. Do the math.",
+                    personality: FighterPersonality.SubmissionHunter),
                 CreateOpponent("bjj_trainer_3", "Trainer Carlos", trainerMoves, health: 190, stamina: 69, strength: 16, defense: 16, speed: 14, striking: 17, grappling: 18, submission: 19, rewardXP: 70, rewardCoins: 38,
                     nickname: "The Professor's Shadow", quote: "I've drilled this position ten thousand times. You're about to be the ten-thousand-and-first lesson.", description: "Carlos drills fundamentals until they become inevitabilities.",
-                    bio: "Drills the same sweep ten thousand times. Calls it 'getting started.'", lossLine: "The student becomes the lesson. Noted in my own notebook.", winLine: "Class dismissed. Same time next week?")
+                    bio: "Drills the same sweep ten thousand times. Calls it 'getting started.'", lossLine: "The student becomes the lesson. Noted in my own notebook.", winLine: "Class dismissed. Same time next week?",
+                    personality: FighterPersonality.CalmTechnician)
             },
             // Milestone 51, Part 5: "Submission specialist" - smart AI's
             // stamina-efficient picks within BJJ's own pool, combined with
             // its combo-completion lookahead, makes Silva patient rather than
             // reckless - fitting "move selection and patience" as the
             // intended lesson.
+            // Milestone 62, Part 3: BJJ Leader = Submission Hunter (explicit).
             Leader = CreateOpponent("bjj_leader", "Professor Silva", leaderMoves, health: 220, stamina: 83, strength: 18, defense: 18, speed: 16, striking: 19, grappling: 21, submission: 24, rewardXP: 150, rewardCoins: 75,
                 nickname: "The Professor", quote: "Strength fades, fighters. Technique doesn't. Class is in session.", description: "Silva has never needed to win a striking exchange to win a fight.",
                 bio: "Has taught everyone in this gym something. Tonight, the lesson runs the other way.", lossLine: "...Technique fades too, apparently. Add that to the syllabus.", winLine: "Strength fades. Technique doesn't. I told you. I always tell you.",
-                isSmartFighter: true)
+                isSmartFighter: true, personality: FighterPersonality.SubmissionHunter)
         };
     }
 
@@ -246,20 +262,27 @@ public static class GymDatabase
             {
                 CreateOpponent("championship_trainer_1", "Elite Trainer Kane", trainerMoves, health: 210, stamina: 75, strength: 18, defense: 18, speed: 17, striking: 20, grappling: 20, submission: 20, rewardXP: 90, rewardCoins: 45,
                     nickname: "Complete", quote: "I studied every discipline in this league. I don't have a weakness. That's not bragging, it's a warning.", description: "Kane blends every discipline into one suffocating gameplan.",
-                    bio: "Studied every discipline in the league. Mastered most of them.", lossLine: "...A gap in the gameplan. First one. Noted, recorded, fixed by tomorrow.", winLine: "Complete fighters don't have bad nights. Tonight proved it."),
+                    bio: "Studied every discipline in the league. Mastered most of them.", lossLine: "...A gap in the gameplan. First one. Noted, recorded, fixed by tomorrow.", winLine: "Complete fighters don't have bad nights. Tonight proved it.",
+                    personality: FighterPersonality.Veteran),
                 CreateOpponent("championship_trainer_2", "Elite Trainer Mateo", trainerMoves, health: 220, stamina: 78, strength: 19, defense: 19, speed: 18, striking: 21, grappling: 21, submission: 21, rewardXP: 95, rewardCoins: 48,
                     nickname: "The Gatekeeper", quote: "Get past me, then we'll talk about you being champion material. Until then, sit down.", description: "Mateo exists to filter out anyone who isn't ready.",
-                    bio: "Has personally ended more title runs than anyone admits.", lossLine: "...Through the gate. Fine. Wasn't expecting that. Wasn't NOT expecting it either.", winLine: "Gate's still shut. Come back when you've got a key."),
+                    bio: "Has personally ended more title runs than anyone admits.", lossLine: "...Through the gate. Fine. Wasn't expecting that. Wasn't NOT expecting it either.", winLine: "Gate's still shut. Come back when you've got a key.",
+                    personality: FighterPersonality.Calculated),
                 CreateOpponent("championship_trainer_3", "Elite Trainer Yuki", trainerMoves, health: 230, stamina: 80, strength: 20, defense: 20, speed: 19, striking: 22, grappling: 22, submission: 22, rewardXP: 100, rewardCoins: 50,
                     nickname: "No Wasted Motion", quote: "Everything I do has a reason. You're about to find out what your reason was.", description: "Yuki's efficiency makes every exchange feel inevitable.",
-                    bio: "Trains in total silence. Says noise is wasted motion.", lossLine: "...Unexpected. Recalculating. That's never happened before.", winLine: "No wasted motion. No wasted time. No surprise.")
+                    bio: "Trains in total silence. Says noise is wasted motion.", lossLine: "...Unexpected. Recalculating. That's never happened before.", winLine: "No wasted motion. No wasted time. No surprise.",
+                    personality: FighterPersonality.CalmTechnician)
             },
+            // Milestone 62, Part 3: Volkov - the undefeated, experienced apex
+            // of the league. "Veteran": composed, efficient, leans on defense
+            // when ahead rather than chasing a finish he doesn't need.
             Leader = CreateOpponent("championship_leader", "Champion Volkov", leaderMoves, health: 260, stamina: 95, strength: 23, defense: 22, speed: 21, striking: 25, grappling: 25, submission: 25, rewardXP: 250, rewardCoins: 120,
                 nickname: "The Apex", quote: "Every fighter who's stood across from me thought they were the exception. I've got a long memory and an undefeated streak. Convince me you're different. I'll wait.",
                 description: "Volkov has beaten every style the league has thrown at him. You're not the exception.",
                 bio: "Champion Volkov has held the belt longer than some gyms have existed. Every discipline the league has, he's already beaten - and he remembers the name of every fighter who tried. Tonight, he's still waiting for a name worth remembering.",
                 lossLine: "...Huh. There it is. The version where you're better than me. Didn't think I'd see it. Wear the belt better than I did - and remember MY name too.",
-                winLine: "There's no version of tonight where you walk out of here better than me. Go train. Come back when there is one. I'll still be here.")
+                winLine: "There's no version of tonight where you walk out of here better than me. Go train. Come back when there is one. I'll still be here.",
+                personality: FighterPersonality.Veteran)
         };
     }
 }

@@ -312,10 +312,16 @@ public class BattleSystem
             return CheckResult();
         }
 
+        // Milestone 62, Part 2: a single cheap lookup (switch, no allocation)
+        // read once per turn - applies this opponent's personality nudge to
+        // the existing recover/defend/attack rolls below.
+        var traits = FighterPersonalityTraits.Get(Opponent.Personality);
+
         // Milestone 30, Part 5: the AI can also choose to recover when low on
         // stamina, instead of just sitting at low stamina behind passive regen.
         float staminaRatio = (float)Opponent.Stats.CurrentStamina / Opponent.Stats.MaxStamina;
-        bool wantsToRecover = staminaRatio < AiLowStaminaRatioThreshold && rng.Next(0, 100) < AiRecoverChancePercent;
+        int recoverChance = Mathf.Clamp(AiRecoverChancePercent - traits.AttackBiasPercent + traits.RecoverBiasPercent, 5, 90);
+        bool wantsToRecover = staminaRatio < AiLowStaminaRatioThreshold && rng.Next(0, 100) < recoverChance;
 
         // Milestone 40, Part 4: a second, complementary roll for a defensive
         // stance instead of attacking - more likely at low stamina, when
@@ -330,11 +336,14 @@ public class BattleSystem
         // everyone except Wrestling gym fighters) - reinforces that gym's
         // "control" identity by having its fighters lean on Parry/Clinch
         // more, so the player has to learn those mechanics to get past them.
+        // Milestone 62, Part 2: personality's own defense/attack bias is
+        // layered on top of (not instead of) that existing gym-level bias.
         int defenseChance = AiDefenseBaseChancePercent
             + (staminaRatio < AiLowStaminaRatioThreshold ? AiDefenseLowStaminaBonusPercent : 0)
             + (aiLosingBadly ? AiDefenseLosingBadlyBonusPercent : 0)
             + (facingComboPressure ? AiDefenseComboPressureBonusPercent : 0)
-            + Opponent.DefenseBiasPercent;
+            + Opponent.DefenseBiasPercent
+            + traits.DefenseBiasPercent - traits.AttackBiasPercent / 2;
         bool wantsToDefend = !wantsToRecover && rng.Next(0, 100) < defenseChance;
 
         var move = (wantsToRecover || wantsToDefend) ? null : ChooseEnemyMove(Opponent);
@@ -685,12 +694,30 @@ public class BattleSystem
         if (affordableMovesBuffer.Count == 0) return null;
 
         // Milestone 34, Part 5/6: an opt-in smarter policy for specific
-        // opponents (Rival Scratch) only - every other fighter keeps the
-        // exact chance-based behavior below, completely unchanged.
+        // opponents (Rival Scratch, gym leaders as of Milestone 51) only -
+        // every other fighter keeps the exact chance-based behavior below.
+        // Milestone 62, Part 2: personality's category preference is checked
+        // here too (not inside ChooseSmartEnemyMove), so a smart, personality-
+        // assigned leader still leans toward their preferred category before
+        // falling through to the existing combo-seeking/efficiency logic -
+        // without touching that logic itself.
+        var traits = FighterPersonalityTraits.Get(enemy.Personality);
+        if (traits.PreferredCategory.HasValue && rng.Next(0, 100) < 55)
+        {
+            for (int i = 0; i < affordableMovesBuffer.Count; i++)
+            {
+                if (affordableMovesBuffer[i].Category == traits.PreferredCategory.Value)
+                    return affordableMovesBuffer[i];
+            }
+        }
+
         if (enemy.IsSmartFighter) return ChooseSmartEnemyMove(cheapest);
 
         // Occasionally conserve stamina even when a stronger move is affordable.
-        if (rng.Next(0, 100) < AiConserveStaminaChancePercent) return cheapest;
+        // Milestone 62, Part 2: personality nudges this same roll - Patient/
+        // CalmTechnician conserve more often, WildBrawler/PressureFighter less.
+        int conserveChance = Mathf.Clamp(AiConserveStaminaChancePercent + traits.ConserveStaminaBiasPercent, 0, 80);
+        if (rng.Next(0, 100) < conserveChance) return cheapest;
 
         float staminaRatio = (float)enemy.Stats.CurrentStamina / enemy.Stats.MaxStamina;
         if (staminaRatio < AiLowStaminaRatioThreshold) return cheapest;

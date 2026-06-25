@@ -33,4 +33,9 @@ public class OpponentInfo
     // to reinforce that gym's "control" identity. Adjusts an existing
     // weight; no new AI behavior.
     public int DefenseBiasPercent;
+
+    // Milestone 62, Part 1/3: a descriptor, not a class - defaults to None
+    // (no behavioral change) for anything that doesn't set it. See
+    // FighterPersonalityTraits for the small weighting nudges this applies.
+    public FighterPersonality Personality;
 }

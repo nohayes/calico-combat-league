@@ -336,7 +336,7 @@ public class GameManager : MonoBehaviour
         PrestigeSystem.ApplyScaling(opponentStats, PrestigeLevel);
 
         CurrentOpponent = new FighterData(opponent.Name, opponentStats, opponent.Moves)
-            { IsSmartFighter = opponent.IsSmartFighter, DefenseBiasPercent = opponent.DefenseBiasPercent };
+            { IsSmartFighter = opponent.IsSmartFighter, DefenseBiasPercent = opponent.DefenseBiasPercent, Personality = opponent.Personality };
         CurrentBattle = new BattleSystem(Player, CurrentOpponent);
         ChangeState(GameState.Battle);
     }
@@ -588,7 +588,12 @@ public class GameManager : MonoBehaviour
             Bio = "You beat everyone else.\nNow beat the fighter who got you here.",
             LossLine = "You are not the same fighter who started.\nThat is why you won.",
             WinLine = "You already know how to beat me.\nTry again.",
-            IsSmartFighter = true
+            IsSmartFighter = true,
+            // Milestone 62, Part 3: Adaptive - per the brief, "use the
+            // player's move set exactly as before," so this carries zero
+            // behavioral bias (FighterPersonalityTraits.Get returns all
+            // zeros for it) and exists purely as a presentation label.
+            Personality = FighterPersonality.Adaptive
         };
 
         // GymType.Championship alone gives the fight the strongest existing
@@ -753,7 +758,12 @@ public class GameManager : MonoBehaviour
             Bio = "Same league, same gyms, same dream - except he's been one step ahead the whole time. Tonight, that ends.",
             LossLine = "Huh. Guess you earned it.",
             WinLine = "Still not there. Come back when you're ready.",
-            IsSmartFighter = true
+            IsSmartFighter = true,
+            // Milestone 62, Part 3: "Veteran + Calculated" - Calculated is the
+            // mechanical trait (efficient, leans defensive, no wasted
+            // stamina); the veteran experience is already conveyed through
+            // his stats/dialogue, so it doesn't need a second mechanical knob.
+            Personality = FighterPersonality.Calculated
         };
 
         // A dedicated marker distinct from GymType.Championship - the Rival

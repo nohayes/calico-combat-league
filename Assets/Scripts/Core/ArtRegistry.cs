@@ -62,30 +62,29 @@ public static class ArtRegistry
     public static Sprite GetArchetypePortrait(ArchetypeType archetype) =>
         archetype == ArchetypeType.Unspecified ? null : Load($"Art/Fighters/archetype_{archetype}");
 
+    // Milestone 61, Part 2: the "exact id, then shared archetype art" chain
+    // below was repeated by hand for the pose tier and again for the idle
+    // fallback tier - factored into one helper so a future 3rd pose tier (or
+    // another method needing the same id-then-archetype chain) doesn't have
+    // to repeat it a third time.
     public static Sprite GetBattleSprite(string fighterId, ArchetypeType archetype, FighterSpritePose pose)
     {
         string poseName = pose.ToString().ToLowerInvariant();
 
+        var sprite = TryLoadBattleSprite(fighterId, archetype, poseName);
+        if (sprite != null) return sprite;
+
+        // Non-idle poses that have no dedicated art fall back to idle art
+        // before giving up entirely.
+        return pose != FighterSpritePose.Idle ? TryLoadBattleSprite(fighterId, archetype, "idle") : null;
+    }
+
+    static Sprite TryLoadBattleSprite(string fighterId, ArchetypeType archetype, string poseName)
+    {
         var exact = string.IsNullOrEmpty(fighterId) ? null : Load($"Art/Fighters/Battle/{fighterId}_{poseName}");
         if (exact != null) return exact;
 
-        var archetypeSprite = archetype == ArchetypeType.Unspecified
-            ? null
-            : Load($"Art/Fighters/Battle/archetype_{archetype}_{poseName}");
-        if (archetypeSprite != null) return archetypeSprite;
-
-        if (pose != FighterSpritePose.Idle)
-        {
-            exact = string.IsNullOrEmpty(fighterId) ? null : Load($"Art/Fighters/Battle/{fighterId}_idle");
-            if (exact != null) return exact;
-
-            archetypeSprite = archetype == ArchetypeType.Unspecified
-                ? null
-                : Load($"Art/Fighters/Battle/archetype_{archetype}_idle");
-            if (archetypeSprite != null) return archetypeSprite;
-        }
-
-        return null;
+        return archetype == ArchetypeType.Unspecified ? null : Load($"Art/Fighters/Battle/archetype_{archetype}_{poseName}");
     }
 
     public static Sprite GetGymBanner(string gymId) =>
